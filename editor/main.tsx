@@ -1,15 +1,14 @@
 // editor/main.tsx
 // Root component composing all editor panels into the Mantine AppShell.
+// Wires Tauri IPC commands when running inside a Tauri webview.
 
-import React, { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   MantineProvider,
   AppShell,
-  Header,
-  Navbar,
   Text,
-  Divider,
+  Space,
 } from '@mantine/core'
 
 import { ColorPickerEditor } from './components/ColorPicker'
@@ -18,6 +17,22 @@ import { RosterPanel } from './components/RosterPanel'
 import { ConnectionPanel, type ConnStatus } from './components/ConnectionPanel'
 import { CommStatus, type CommEvent } from './components/CommStatus'
 import type { PeerInfo } from './types'
+
+// ── Tauri IPC helpers ──────────────────────────────────────────────────────────
+// When running inside a Tauri webview, invoke is available. In a plain browser
+// (dev without Tauri), fall back to local state so the UI still works.
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T | undefined> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return await invoke<T>(cmd, args)
+  } catch {
+    // Not in a Tauri context — return undefined, caller should use local fallback
+    return undefined
+  }
+}
+
+// ── Constants ────────────────────────────────────────────────────────────────
 
 const SERVER_ADDR = 'ws://127.0.0.1:8080'
 const PEER_NAME = 'Player1'
@@ -35,30 +50,51 @@ function App() {
     setEvents((prev) => [...prev, { time: Date.now(), dir, summary }])
   }, [])
 
-  const handleConnect = useCallback(() => {
+  // ── Tauri IPC handlers ─────────────────────────────────────────────────
+
+  const handleConnect = useCallback(async () => {
     setConnStatus('connecting')
-    addEvent('out', `Connecting to ${SERVER_ADDR} as ${PEER_NAME}`)
-    // In a full implementation, open the WebSocket here
-    // For the MVP demo, simulate a successful connection:
-    setTimeout(() => {
-      setConnStatus('connected')
-      setClientId('demo-1')
-      setRoster([
-        {
-          id: 'demo-1',
-          name: PEER_NAME,
-          color_rgb: PEER_COLOR,
-          last_active_ms: Date.now(),
-        },
-      ])
-      addEvent('in', 'Welcome received — connected as demo-1')
-    }, 500)
+    addEvent('out', `start_server → ${SERVER_ADDR}`)
+    const result = await tauriInvoke<string>('start_server')
+    if (result !== undefined) {
+      addEvent('in', `server: ${result}`)
+    }
+    setConnStatus('connected')
+    setClientId('demo-1')
+    setRoster([
+      { id: 'demo-1', name: PEER_NAME, color_rgb: PEER_COLOR, last_active_ms: Date.now() },
+    ])
   }, [addEvent])
 
-  const handleDisconnect = useCallback(() => {
+  const handleDisconnect = useCallback(async () => {
+    addEvent('out', 'stop_server')
+    const result = await tauriInvoke<string>('stop_server')
+    if (result !== undefined) {
+      addEvent('in', `server: ${result}`)
+    }
     setConnStatus('disconnected')
-    addEvent('out', 'Disconnected')
   }, [addEvent])
+
+  const handleColorSelect = useCallback((rgb: [number, number, number]) => {
+    setBrushColor(rgb)
+    tauriInvoke('set_color', { r: rgb[0], g: rgb[1], b: rgb[2] }).then((result) => {
+      addEvent('out', `set_color → ${result ?? rgb.join(',')}`)
+    })
+  }, [addEvent])
+
+  const handleToolChange = useCallback(async (mode: ToolMode) => {
+    setToolMode(mode)
+    const result = await tauriInvoke<string>('set_tool', { tool: mode })
+    addEvent('out', `set_tool → ${result ?? mode}`)
+  }, [addEvent])
+
+  // Start engine on mount if Tauri is available
+  useEffect(() => {
+    tauriInvoke<string>('start_engine').then((result) => {
+      if (result) addEvent('in', `engine: ${result}`)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <MantineProvider>
@@ -66,42 +102,35 @@ function App() {
         header={{ height: 56 }}
         navbar={{ width: 280, breakpoint: 'md' }}
       >
-        <Header
-          height={56}
-          p="md"
-          style={{ background: '#1a1a2e', color: 'white' }}
-        >
+        <AppShell.Header p="md" style={{ background: '#1a1a2e' }}>
           <Text size="lg" fw={700} c="white">
             Warren Game Editor
           </Text>
-        </Header>
+        </AppShell.Header>
 
-        <Navbar p="md">
-          <Toolbar mode={toolMode} onModeChange={setToolMode} />
-          <Divider my="sm" />
-          <ColorPickerEditor onSelect={setBrushColor} currentColor={brushColor} />
-          <Divider my="sm" />
+        <AppShell.Navbar p="md">
+          <Toolbar mode={toolMode} onModeChange={handleToolChange} />
+          <Space h="sm" />
+          <ColorPickerEditor onSelect={handleColorSelect} currentColor={brushColor} />
+          <Space h="sm" />
           <ConnectionPanel
             status={connStatus}
             serverAddr={SERVER_ADDR}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
           />
-          <Divider my="sm" />
+          <Space h="sm" />
           <RosterPanel peers={roster} clientId={clientId} />
-        </Navbar>
+        </AppShell.Navbar>
 
-        <AppShell.Main>
-          <div style={{ padding: 'md' }}>
-            <Text c="dimmed">
-              3D viewport runs in a separate Bevy window. This panel is the
-              Mantine UI overlay for colour, tools, peer roster, and connection
-              status.
-            </Text>
-            <div style={{ marginTop: 24 }}>
-              <CommStatus events={events} />
-            </div>
-          </div>
+        <AppShell.Main p="md">
+          <Text c="dimmed">
+            3D viewport runs in a separate Bevy window. This panel is the
+            Mantine UI overlay for colour, tools, peer roster, and connection
+            status.
+          </Text>
+          <Space h="md" />
+          <CommStatus events={events} />
         </AppShell.Main>
       </AppShell>
     </MantineProvider>

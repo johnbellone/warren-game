@@ -1,0 +1,22 @@
+[package]
+name = "warren-client"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+name = "warren_client"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+tungstenite = { workspace = true }
+log = { workspace = true }
+simple_logger = { workspace = true }

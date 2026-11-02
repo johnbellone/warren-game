@@ -21,3 +21,12 @@ The Warren Game Editor is a comprehensive development environment that combines:
 
 This architecture supports simultaneous editing by multiple users with real-time synchronization and conflict resolution.
 * [MVP Plan: Collaborative Voxel Asset Editor](mvp-plan.md) - Architecture and phased delivery plan for the Warren Game Editor MVP: two or more Tauri instances run a Bevy 3D scene and Mantine UI, connected to a shared WebSocket server for real-time collaborative voxel editing.
+* [Weft Voxel Engine Analysis](weft-analysis.md) - Deep analysis of Weft's Vulkan rendering pipeline, 16x16 texture system, .anim/_e/overlay/ctm sidecar files, resource pack layout, Java block model JSON, and Bevy 0.20 translation for each concept.
+* [Pumpkin Minecraft Server Analysis](pumpkin-analysis.md) - Analysis of NBT data model (pumpkin-nbt), chunk format (pumpkin-world), Java/Bedrock protocol, skin handling, TOML config, and WASM plugin host as reference for warren-game.
+* [Texture Loader Crate Analysis](texture-loader-crates.md) - Comparison of minecraft_assets crate vs Bevy 0.20 built-in TextureAtlasLayout vs custom serde_json parser; recommendation for warren-game MVP.
+* [Texture Loading Architecture](texture-loader-architecture.md) - Proposed module structure, data structures, Bevy system layout, and migration path for adding textured cubes to warren-game's voxel world.
+* [aeronet Analysis](aeronet-analysis.md) - Deep analysis of aecsocket/aeronet: ECS-native networking, swappable IO layers (channel/WebSocket/WebTransport/Iroh/Steam), layered transport stack, and warren-game migration via aeronet_websocket.
+* [bevy_replicon Analysis](bevy-replicon-analysis.md) - Server-authoritative ECS world replication, remote events/triggers, authorization, client-side visibility, no builtin IO with 5 messaging backends, Bevy 0.20 via 0.45.
+* [lightyear Analysis](lightyear-analysis.md) - Bevy multiplayer framework layering bevy_replicon on aeronet with prediction/rollback/interpolation/bandwidth; Bevy 0.20 via 0.31; overkill for the editor.
+* [matchbox Analysis](matchbox-analysis.md) - P2P WebRTC networking for wasm+native, signaling server, ggrs/leafwing; bevy_matchbox tops out at Bevy 0.17, incompatible with warren-game's Bevy 0.20.
+* [Networking Cross-Crate Comparison](networking-comparison.md) - Comparison matrix of all 4 crates, lightyear=bevy_replicon+aeronet relationship, and warren-game recommendation (aeronet+bevy_replicon MVP, defer lightyear, reject P2P matchbox).

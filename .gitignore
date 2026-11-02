@@ -5,6 +5,9 @@
 .beads/proxieddb/
 *.gate.lock*
 .beads.gate.lock
+.pi/tasks
+.pi/goals
+.pi/.goals-pool-snapshot.json
 
 # Added by cargo
 
