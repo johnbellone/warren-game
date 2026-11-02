@@ -1,3 +1,22 @@
+## 2026-11-02
+* **Update**: Linked `big-space-analysis.md` to `bevy-water-analysis.md` (Both address world-scale considerations: big_space handles coordinate precision for large worlds; bevy_water handles tileable rendering for large water surfaces. Complementary.).
+* **Update**: Linked `bevy-settings-example.md` to `bevy-plugin-example.md` (SettingsPlugin is a Plugin that manages persistent Resources via SettingsGroup. Shows the Plugin trait pattern with config via constructor args.).
+* **Update**: Linked `bevy-logs-example.md` to `bevy-plugin-example.md` (Bevy's LogPlugin is itself a Plugin registered via add_plugins(). Demonstrates the Plugin registration pattern in production Bevy code.).
+* **Update**: Linked `bevy-console-analysis.md` to `bevy-logs-example.md` (bevy_console can capture Bevy's log! / info! / warn! output and display it in the in-game console.).
+* **Update**: Linked `bevy-fps-controller-analysis.md` to `rapier-analysis.md` (bevy_fps_controller also supports Rapier via --features rapier (uses bevy-rapier wrapper, not Rapier directly).).
+* **Update**: Linked `bevy-fps-controller-analysis.md` to `avian-analysis.md` (bevy_fps_controller supports Avian via --features avian. Uses Avian for character physics in FPS movement.).
+* **Update**: Linked `avian-analysis.md` to `rapier-analysis.md` (Avian is the Bevy-native integration layer for Rapier. Uses Parry (Rapier's collision geometry crate) as its default collision backend.).
+* **Creation**: Documented concept `bevy-logs-example.md` (Bevy Logs — LogPlugin, Log Levels, and once! Spam Prevention).
+* **Creation**: Documented concept `bevy-plugin-example.md` (Bevy Plugin — Custom Plugin Registration Pattern).
+* **Creation**: Documented concept `bevy-settings-example.md` (Bevy Settings — SettingsGroup, SaveSettingsDeferred, and Persistent Config).
+* **Creation**: Documented concept `bevy-fps-controller-analysis.md` (bevy_fps_controller — Source-Engine-Inspired FPS Movement for Bevy).
+* **Creation**: Documented concept `rapier-analysis.md` (Rapier — Multi-Platform Physics Engine (Deno/Rust)).
+* **Creation**: Documented concept `bevy-console-analysis.md` (bevy_console — Half-Life-Inspired Console for Bevy).
+* **Creation**: Documented concept `bevy-animation-graph-analysis.md` (bevy_animation_graph — Animation Graphs and State Machines for Bevy).
+* **Creation**: Documented concept `bevy-hanabi-analysis.md` (bevy_hanabi — GPU Particle System Plugin for Bevy).
+* **Creation**: Documented concept `bevy-third-person-camera-analysis.md` (bevy_third_person_camera — Configurable Third-Person Camera for Bevy).
+* **Creation**: Documented concept `avian-analysis.md` (Avian — ECS-Driven 2D/3D Physics Engine for Bevy).
+
 ## 2026-11-01
 * **Update**: Updated concept `foundation-decision.md`.
 * **Update**: Updated concept `components-client.md`.

@@ -50,6 +50,7 @@ export function ColorPickerEditor({ onSelect, currentColor = [1, 0, 0] }: Props)
           return (
             <button
               key={p.label}
+              title={p.label}
               onClick={() => handlePreset(p.rgb)}
               style={{
                 width: 28,
@@ -59,7 +60,6 @@ export function ColorPickerEditor({ onSelect, currentColor = [1, 0, 0] }: Props)
                 backgroundColor: hex,
                 cursor: 'pointer',
                 padding: 0,
-                title: p.label,
               }}
             />
           )
