@@ -4,24 +4,35 @@ A Tauri-based desktop application with embedded Bevy engine for live game editin
 
 ## Architecture Overview
 
-This project is structured as a **Tauri desktop application** that embeds a **Bevy game engine frame** for live editing functionality, with a **web-compatible server component**:
+This project is structured as a **Tauri desktop application** that embeds a **Bevy game engine frame** for live editing functionality, with a **web-compatible server component** that supports multiplayer collaborative editing:
 
 1. **Frontend**: Bun web application using Mantine 9 framework
 2. **Backend**: Tauri application with Rust backend 
 3. **Embedded Engine**: Bevy game engine integrated for real-time editing
-4. **Server Component**: Game server that supports both native and WebAssembly execution
+4. **Multiplayer Server**: Game server that enables simultaneous asset creation and editing
 
 ## Project Structure
 
 - `src-tauri/` - Tauri application and Rust backend
 - `src/web/` - Bun web frontend (Mantine 9 + extensions)
 - `bevy/` - Bevy engine integration components  
-- `server/` - Game server with WASM support
+- `server/` - Game server with WASM support and multiplayer features
 - `package.json` - Node.js/Bun dependencies
 
 ## Features
 
-This editor will allow live editing of game content with real-time preview in the embedded Bevy engine, with server functionality that can run both natively and in the browser via WebAssembly.
+This editor will allow:
+- Live editing of game content with real-time preview in the embedded Bevy engine
+- Collaborative asset creation where multiple users can edit simultaneously
+- Web-compatible server that can run both natively and in the browser via WebAssembly
+
+## Multiplayer Collaboration
+
+The system supports collaborative editing where two or more users can:
+- Simultaneously create and modify game assets
+- See live updates from other collaborators in real-time
+- Resolve conflicts when multiple users edit the same asset
+- Maintain proper access controls and user sessions
 
 ## Prerequisites
 
@@ -49,6 +60,6 @@ This is an advanced project that requires setting up the integration between:
 - Tauri desktop application
 - Bun web frontend using Mantine 9 
 - Embedded Bevy engine for live editing functionality
-- Web-compatible server component that can run in browser via WASM
+- Web-compatible server component that can run in browser via WASM with multiplayer capabilities
 
 The project will require substantial configuration and custom tooling to properly integrate all components as designed.
