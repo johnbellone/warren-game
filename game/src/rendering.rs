@@ -149,39 +149,25 @@ pub fn handle_click(
 /// Simple WASD / Q E / R F camera movement on the ground plane.
 /// Bevy's built-in `TransformSystem` propagates Transform → GlobalTransform.
 pub fn move_camera(
-    camera_q: Single<(&mut Transform, &mut GlobalTransform)>,
+    mut cameras: Query<&mut Transform, With<Camera3d>>,
     input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {
-    let (mut transform, _gt_transform) = camera_q.into_inner();
-
+    let mut transform = match cameras.single_mut() {
+        Ok(t) => t,
+        Err(_) => return,
+    };
     let sensitivity = 10.0 * time.delta_secs();
     let mut delta = Vec3::ZERO;
 
-    if input.pressed(KeyCode::KeyW) {
-        delta += Vec3::Z;
-    }
-    if input.pressed(KeyCode::KeyS) {
-        delta -= Vec3::Z;
-    }
-    if input.pressed(KeyCode::KeyA) {
-        delta -= Vec3::X;
-    }
-    if input.pressed(KeyCode::KeyD) {
-        delta += Vec3::X;
-    }
-    if input.pressed(KeyCode::KeyQ) {
-        delta -= Vec3::Y;
-    }
-    if input.pressed(KeyCode::KeyE) {
-        delta += Vec3::Y;
-    }
-    if input.pressed(KeyCode::KeyR) {
-        delta += Vec3::Y * 2.0;
-    }
-    if input.pressed(KeyCode::KeyF) {
-        delta -= Vec3::Y * 2.0;
-    }
+    if input.pressed(KeyCode::KeyW) { delta += Vec3::Z; }
+    if input.pressed(KeyCode::KeyS) { delta -= Vec3::Z; }
+    if input.pressed(KeyCode::KeyA) { delta -= Vec3::X; }
+    if input.pressed(KeyCode::KeyD) { delta += Vec3::X; }
+    if input.pressed(KeyCode::KeyQ) { delta -= Vec3::Y; }
+    if input.pressed(KeyCode::KeyE) { delta += Vec3::Y; }
+    if input.pressed(KeyCode::KeyF) { delta -= Vec3::Y * 2.0; }
+    if input.pressed(KeyCode::KeyR) { delta += Vec3::Y * 2.0; }
 
     if delta.length_squared() > 0.0 {
         let mut pos = transform.translation + delta * sensitivity;
