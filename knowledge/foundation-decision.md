@@ -1,48 +1,24 @@
-# Warren Game Editor - Project Foundation
+---
+type: Decision
+title: Project Foundation
+description: "The Warren Game Editor uses a Cargo workspace with protocol, server, and game crates, plus a Tauri + Mantine editor frontend, targeting Bevy 0.20."
+tags: [architecture, foundation, cargo, bevy, tauri]
+generated: { by: agent/mcp, at: "2026-11-01T17:29:29Z" }
+status: stable
+---
 
-## Overview
-This document describes the initial foundation of the Warren Game Editor project that combines Tauri desktop application, Bevy game engine, and multiplayer collaboration features.
-
-## Architecture Components
-- Tauri Desktop Application (client/)
-- Mantine 9 Web Interface (editor/) 
-- Bevy Game Engine Integration (game/)
-- Multiplayer Game Server (server/)
-
-## Key Features
-- Cross-platform desktop application
-- Live game editing with Bevy engine
-- Multiplayer collaboration for asset creation
-- WebAssembly support for browser execution
-- Real-time synchronization and conflict resolution
-
-## Technical Details
-
-### Client Component
-- Tauri application backend with system integration
-- Communication bridge to web frontend
-- Process management for game engine
-
-### Editor Component  
-- Bun-based React application using Mantine 9 UI
-- Live preview and configuration controls
-- Multiplayer collaboration tools
-
-### Game Component
-- Embedded Bevy engine runtime
-- Asset loading and management capabilities
-- Real-time rendering and editing support
-
-### Server Component
-- Multiplayer collaboration server
-- WASM-compatible execution
-- WebSocket communication protocol
-
-## Target Use Cases
-- Multiplayer game asset creation and editing
-- Live collaborative development environments  
-- Cross-platform game development tools
-- Web-based game editing with desktop client
-
-## Implementation Status
-Initial foundation complete with all components properly structured and configured for integration.
+## Project Structure
+warren-game/ (Cargo workspace)
+  protocol/ - Shared wire types: ClientMsg, ServerMsg, Voxel, PeerInfo
+  server/ - WebSocket server (tokio + tokio-tungstenite)
+  game/ - Voxel world data model (Bevy integration later)
+  client/ - Tauri desktop app configuration
+  editor/ - Mantine React UI (TSX)
+  docs/ - Documentation including MVP_PLAN.md
+  knowledge/ - OKF knowledge base
+## Key Decisions
+- Bevy 0.20 latest stable. bevy_voxel is a reserved placeholder; build voxel rendering ourselves using Mesh3d cuboids.
+- protocol crate is single source of truth for wire types
+- Server authoritative: server validates and broadcasts all edits
+- Sparse voxel storage: HashMap for simplicity, chunk-based later
+- Tauri + Mantine: desktop UI via Tauri, web UI via Mantine React

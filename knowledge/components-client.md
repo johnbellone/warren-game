@@ -1,23 +1,19 @@
-# Client Component (Tauri Application)
+---
+type: Architecture
+title: Client Component (Tauri)
+description: "The Tauri desktop application wraps the Bevy engine and Mantine UI, providing desktop integration and IPC bridge."
+tags: [tauri, desktop, client, ipc]
+generated: { by: agent/mcp, at: "2026-11-01T17:29:29Z" }
+status: stable
+---
 
-## Description
-The client component is the Tauri-based desktop application that serves as the main interface for the Warren Game Editor. It provides system integration, communication with other components, and process management.
-
-## Key Functions
-- System integration and file operations
-- Communication bridge to web frontend  
-- Process management for game engine
-- WebSocket server for multiplayer connections
-- Cross-platform deployment capabilities
-
-## Technical Details
-- Built with Rust and Tauri framework
-- Uses tauri.conf.json for configuration
-- Supports multi-platform deployment (Windows, macOS, Linux)
-- Integrated with the game engine for live preview functionality
-
-## Integration Points
-Connects to:
-- Web frontend through HTTP/WebSocket communication
-- Game component for real-time rendering updates 
-- Server component for multiplayer coordination
+## Tauri Desktop Application
+The client/ directory contains the Tauri desktop application configuration.
+## Role
+- Wrap Bevy 3D scene and Mantine React UI in native desktop window
+- Provide IPC bridge between Mantine UI (JS) and Bevy engine (Rust)
+- Commands: start/stop server, create/destroy scene, sync state
+## Tauri v2
+Uses Tauri 2.x for multi-window and webview support.
+Bevy window and Mantine webview are separate (MVP).
+For later: single-window with Bevy rendering via canvas.
