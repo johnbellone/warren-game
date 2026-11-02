@@ -1,39 +1,44 @@
-# Warren Game
+# Warren Game Editor
 
-A game project using the Bevy game engine.
+A Tauri-based desktop application with embedded Bevy engine for live game development.
 
-## About
+## Architecture Overview
 
-This repository contains a Bevy-based game project. Bevy is a modern, data-driven game engine written in Rust.
+This project is structured as a **Tauri desktop application** that embeds a **Bevy game engine frame** for live editing functionality:
 
-## Getting Started
-
-### Prerequisites
-
-- Rust (latest stable version)
-- Cargo (comes with Rust)
-
-### Building
-
-```bash
-cargo build
-```
-
-### Running
-
-```bash
-cargo run
-```
+1. **Frontend**: Bun web application using Mantine 9 framework
+2. **Backend**: Tauri application with Rust backend 
+3. **Embedded Engine**: Bevy game engine integrated for real-time editing
 
 ## Project Structure
 
-- `src/main.rs` - Main application entry point
-- `Cargo.toml` - Project dependencies and configuration
+- `src-tauri/` - Tauri application and Rust backend
+- `src/web/` - Bun web frontend (Mantine 9 + extensions)
+- `bevy/` - Bevy engine integration components
 
-## Dependencies
+## Features
 
-- `bevy = "0.13"` - The Bevy game engine (latest stable version)
+This editor will allow live editing of game content with real-time preview in the embedded Bevy engine.
 
-## License
+## Prerequisites
 
-This project is licensed under the MIT License.
+- Rust toolchain
+- Node.js 18+ 
+- Bun
+- Tauri dependencies
+
+## Development Setup
+
+1. Install Rust
+2. Install Bun
+3. Install Tauri CLI: `npm install -g @tauri-apps/cli`
+4. Run in development mode: `npm run tauri dev`
+
+## Important Notes
+
+This is an advanced project that requires setting up the integration between:
+- Tauri desktop application
+- Bun web frontend using Mantine 9 
+- Embedded Bevy engine for live editing functionality
+
+The project will require substantial configuration and custom tooling to properly integrate all components.

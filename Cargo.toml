@@ -1,19 +1,12 @@
 [package]
-name = "warren-game"
+name = "warren-game-editor"
 version = "0.1.0"
 edition = "2024"
 
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
 [dependencies]
-bevy = "0.13"
-
-# Optimization options
-[profile.dev]
-opt-level = 1
-
-[profile.dev.package."*"]
-opt-level = 3
-
-[profile.release]
-opt-level = 'z'
-lto = true
-panic = "abort"
+tauri = { version = "1.5", features = ["api-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

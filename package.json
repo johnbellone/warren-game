@@ -1,0 +1,30 @@
+{
+  "name": "warren-game-editor",
+  "version": "0.1.0",
+  "description": "A Tauri desktop application with embedded Bevy engine for live game editing",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "keywords": [
+    "tauri",
+    "bevy",
+    "game-editor",
+    "mantine"
+  ],
+  "author": "Warren Game Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.5.0"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@mantine/core": "^7.0.0",
+    "@mantine/hooks": "^7.0.0",
+    "@mantine/dates": "^7.0.0",
+    "@tauri-apps/api": "^1.5.0"
+  }
+}

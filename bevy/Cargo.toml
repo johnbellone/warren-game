@@ -1,0 +1,13 @@
+[package]
+name = "warren-game-bevy-integration"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = "0.13"
+# Add any additional Bevy plugins or extensions as needed
+# bevy_egui = "0.24"  # Example for UI integration
+# bevy_asset_loader = "0.17"  # Example for asset loading
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
