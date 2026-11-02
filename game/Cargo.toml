@@ -13,10 +13,19 @@ license = "MIT"
 name = "warren_game"
 crate-type = ["rlib"]
 
+[[bin]]
+name = "warren-game-app"
+path = "src/main.rs"
+
 [dependencies]
+bevy = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 log = { workspace = true }
 warren-protocol = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
