@@ -2,6 +2,8 @@
 // Root component composing all editor panels into the Mantine AppShell.
 // Wires Tauri IPC commands when running inside a Tauri webview.
 
+import '@mantine/core/styles.css'
+
 import { useState, useCallback, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
