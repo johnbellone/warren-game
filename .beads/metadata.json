@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "warren_game",
+  "project_id": "bc4730e0-fc38-4543-8bea-756488fb4d79"
+}
