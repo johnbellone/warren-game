@@ -7,17 +7,17 @@ This document describes the architecture of the Warren Game Editor, a Tauri desk
 The Warren Game Editor combines:
 1. **Tauri Desktop Application** - Cross-platform desktop app with web frontend
 2. **Mantine 9 UI Framework** - For responsive and modern user interface 
-3. **Bevy Engine** - Embedded game engine for live editing functionality
+3. **Game Engine** - Embedded Bevy engine for live editing functionality
 4. **Multiplayer Game Server** - Supports collaborative asset creation
 
 ## Project Structure
 
 ```
 warren-game/
-├── src-tauri/            # Tauri application and Rust backend
+├── client/               # Tauri application and Rust backend
 │   └── tauri.conf.json   # Tauri configuration
-├── src/web/              # Bun web frontend (React + Mantine 9)
-├── bevy/                 # Bevy engine integration
+├── editor/               # Bun web frontend (React + Mantine 9)
+├── game/                 # Bevy engine integration
 │   └── Cargo.toml        # Bevy dependencies
 ├── server/               # Game server with WASM support
 │   ├── Cargo.toml        # Server dependencies  
@@ -28,22 +28,22 @@ warren-game/
 
 ## Key Components
 
-### 1. Tauri Backend (`src-tauri/`)
+### 1. Tauri Backend (`client/`)
 - Rust-based desktop application framework
 - System integration and file operations
 - Communication bridge to web frontend
-- Process management for Bevy engine
+- Process management for game engine
 - WebSocket server for multiplayer connections
 
-### 2. Web Frontend (`src/web/`)
+### 2. Web Frontend (`editor/`)
 - Bun-based React application
 - Mantine 9 UI components
 - Live preview controls
 - Project configuration interface
 - Multiplayer collaboration tools
 
-### 3. Bevy Integration (`bevy/`)
-- Embedded game engine runtime
+### 3. Game Engine (`game/`)
+- Embedded Bevy game engine runtime
 - Asset loading and management
 - Real-time rendering capabilities
 - Communication with Tauri backend
@@ -86,20 +86,20 @@ The core requirement is to allow two or more users to simultaneously create and 
 
 The key challenge is integrating these components for a seamless collaborative experience:
 
-1. **Tauri ↔ Bevy Communication**: Real-time updates between desktop app and embedded engine
+1. **Tauri ↔ Game Engine**: Real-time updates between desktop app and embedded engine
 2. **Web Frontend ↔ Server**: WebSocket connections for multiplayer collaboration
-3. **Server ↔ Bevy**: Asset synchronization back to the engine for preview
+3. **Server ↔ Game Engine**: Asset synchronization back to the engine for preview
 4. **User Management**: Session tracking across all components
 
 ## Development Workflow
 
-1. **Frontend Development**: Edit React components in `src/web/` with collaborative features
-2. **Backend Development**: Handle system operations and multiplayer in `src-tauri/`
-3. **Bevy Integration**: Implement engine communication in `bevy/`
+1. **Frontend Development**: Edit React components in `editor/` with collaborative features
+2. **Backend Development**: Handle system operations and multiplayer in `client/`
+3. **Game Engine**: Implement engine communication in `game/`
 4. **Server Development**: Add multiplayer capabilities in `server/`
 5. **Build Process**: 
    - Tauri bundles the React app with the Rust backend
-   - The Bevy engine runs as a separate component within the desktop app
+   - The game engine runs as a separate component within the desktop app
    - Server can be compiled both natively and for WASM
 
 ## Technical Implementation Details

@@ -13,9 +13,9 @@ This project is structured as a **Tauri desktop application** that embeds a **Be
 
 ## Project Structure
 
-- `src-tauri/` - Tauri application and Rust backend
-- `src/web/` - Bun web frontend (Mantine 9 + extensions)
-- `bevy/` - Bevy engine integration components  
+- `client/` - Tauri application and Rust backend
+- `editor/` - Bun web frontend (Mantine 9 + extensions)
+- `game/` - Bevy engine integration components  
 - `server/` - Game server with WASM support and multiplayer features
 - `package.json` - Node.js/Bun dependencies
 
