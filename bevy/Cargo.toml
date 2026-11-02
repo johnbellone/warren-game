@@ -5,9 +5,12 @@ edition = "2024"
 
 [dependencies]
 bevy = "0.13"
-# Add any additional Bevy plugins or extensions as needed
-# bevy_egui = "0.24"  # Example for UI integration
-# bevy_asset_loader = "0.17"  # Example for asset loading
+serde = { version = "1.0", features = ["derive"] }
 
-[build-dependencies]
-tauri-build = { version = "1.5", features = [] }
+# For web support
+[target.'cfg(target_family = "wasm")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
