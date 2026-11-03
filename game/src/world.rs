@@ -9,7 +9,7 @@
 //! The public API (`place`/`erase`/`get`/… /`iter`/`snapshot`) is unchanged
 //! from the flat-map version, so callers do not need to change.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use warren_protocol::{PeerInfo, Voxel, VoxelEdit, AssetType};
 
 /// Chunk edge length in voxels (32³ = 32,768 cells ≈ one city block).
@@ -65,7 +65,7 @@ impl Chunk {
     }
 
     /// Yield each occupied cell as its local (x,y,z) offset + the voxel.
-    fn iter_local(&self) -> impl Iterator<Item = ([usize; 3], &LocalVoxel)> {
+    pub fn iter_local(&self) -> impl Iterator<Item = ([usize; 3], &LocalVoxel)> {
         self.cells.iter().map(|(k, lv)| {
             let z = k / CHUNK2;
             let y = (k % CHUNK2) / CHUNK as usize;
@@ -91,6 +91,10 @@ pub struct VoxelWorld {
     /// The maximum half-extent of the world in each axis (centered at origin).
     /// Used by `in_bounds`.
     bounds: [i32; 3],
+    /// Chunks whose geometry changed since the last mesh sync. A voxel edit
+    /// dirties its own chunk plus the up to 6 face-neighbour chunks, because a
+    /// face on a chunk seam belongs to both chunks.
+    dirty: HashSet<ChunkPos>,
 }
 
 impl VoxelWorld {
@@ -99,6 +103,7 @@ impl VoxelWorld {
         Self {
             chunks: HashMap::new(),
             bounds,
+            dirty: HashSet::new(),
         }
     }
 
@@ -122,6 +127,39 @@ impl VoxelWorld {
         ])
     }
 
+    /// Mark the chunk containing `position` — plus any chunk it shares a face
+    /// boundary with — as needing a mesh rebuild. A seam face belongs to both
+    /// chunks, so editing a boundary voxel dirties both sides.
+    fn mark_dirty(&mut self, position: [i32; 3]) {
+        let c = Self::chunk_of(position);
+        let l = Self::local_of(position);
+        self.dirty.insert(c);
+        for axis in 0..3usize {
+            if l[axis] == 0 {
+                let mut neg = c.0;
+                neg[axis] -= 1;
+                self.dirty.insert(ChunkPos(neg));
+            }
+            if l[axis] == CHUNK as usize - 1 {
+                let mut pos = c.0;
+                pos[axis] += 1;
+                self.dirty.insert(ChunkPos(pos));
+            }
+        }
+    }
+
+    /// Take (and clear) the set of chunks that need rebuilding. Returns an empty
+    /// set when nothing changed.
+    pub fn take_dirty(&mut self) -> HashSet<ChunkPos> {
+        std::mem::take(&mut self.dirty)
+    }
+
+    /// Mark every chunk currently in the world as dirty (used on full
+    /// re-generation, e.g. loading a neighborhood at startup).
+    pub fn dirty_all(&mut self) {
+        self.dirty = self.chunks.keys().copied().collect();
+    }
+
     fn local_of(p: [i32; 3]) -> [usize; 3] {
         [
             p[0].rem_euclid(CHUNK) as usize,
@@ -138,6 +176,7 @@ impl VoxelWorld {
         let l = Self::local_of(position);
         let chunk = self.chunks.entry(c).or_default();
         chunk.set(l[0], l[1], l[2], LocalVoxel { color, asset_type: AssetType::Voxel });
+        self.mark_dirty(position);
     }
 
     /// Erase the voxel at `position`, dropping the chunk if it becomes empty.
@@ -150,6 +189,7 @@ impl VoxelWorld {
                 self.chunks.remove(&c);
             }
         }
+        self.mark_dirty(position);
     }
 
     /// Apply a VoxelEdit delta (either place or erase).
@@ -180,6 +220,17 @@ impl VoxelWorld {
     /// Whether a voxel exists at `position`.
     pub fn contains(&self, position: [i32; 3]) -> bool {
         self.get(position).is_some()
+    }
+
+    /// Get a live reference to the chunk at `cp` (if present).
+    /// Used by the mesher to enumerate a chunk's voxels for face culling.
+    pub fn get_chunk(&self, cp: &ChunkPos) -> Option<&Chunk> {
+        self.chunks.get(cp)
+    }
+
+    /// Whether the chunk at `cp` is currently stored.
+    pub fn has_chunk(&self, cp: &ChunkPos) -> bool {
+        self.chunks.contains_key(cp)
     }
 
     /// Whether a position is within the world half-extents.

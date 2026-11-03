@@ -1,12 +1,14 @@
-//! Rendering layer: VoxelWorldResource, VoxelCube component, and sync systems.
+//! Rendering layer: VoxelWorldResource and per-chunk mesh sync.
 
 use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use bevy::mesh::Indices;
+use bevy::render::render_resource::{Extent3d, PrimitiveTopology, TextureDimension, TextureFormat};
 use std::collections::HashMap;
 
 use crate::character::CameraFollow;
-use crate::world::VoxelWorld;
+use crate::mesh::{collect_chunk_faces, FaceData};
+use crate::world::{ChunkPos, VoxelWorld};
 
 // --------------------------------------------------------------------------
 // Components
@@ -30,8 +32,9 @@ pub struct Ground;
 #[derive(Resource)]
 pub struct VoxelWorldResource {
     pub world: VoxelWorld,
-    /// Mapping of world position → spawned Bevy entity.
-    pub spawned: HashMap<[i32; 3], Entity>,
+    /// Per chunk: the mesh entities currently representing it (one per color
+    /// group). Rebuilt only for dirty chunks.
+    pub spawned_chunks: HashMap<ChunkPos, Vec<Entity>>,
     /// The shared 1×1×1 cuboid mesh handle (created once in setup_environment).
     pub cube_mesh: Handle<Mesh>,
     /// The currently selected brush colour (RGB 0.0–1.0).
@@ -42,7 +45,7 @@ impl Default for VoxelWorldResource {
     fn default() -> Self {
         Self {
             world: VoxelWorld::default(),
-            spawned: HashMap::new(),
+            spawned_chunks: HashMap::new(),
             cube_mesh: Handle::default(),
             brush_color: [1.0, 0.0, 0.0],
         }
@@ -50,56 +53,75 @@ impl Default for VoxelWorldResource {
 }
 
 // --------------------------------------------------------------------------
-// Sync system: diff VoxelWorld against spawned entities
+// Sync system: per-chunk merged mesh culling
 // --------------------------------------------------------------------------
 
-/// Spawns a `Mesh3d` for each new voxel and despawns cubes whose position
-/// no longer exists in the world.
-pub fn sync_voxels_to_scene(
+/// Build and sync chunked voxel meshes.
+///
+/// Replaces the old per-voxel `Mesh3d(Cuboid)` path. For each chunk touched
+/// since the last frame, the previous chunk meshes are despawned and a new set
+/// of merged meshes is built: one mesh per distinct color, with internal faces
+/// culled (across chunk seams via `world.get`). A dirty chunk that became empty
+/// is dropped. This turns ~9,700 draw calls into a few dozen, and only the
+/// chunks actually edited are re-meshed.
+pub fn sync_chunk_meshes(
     mut world_res: ResMut<VoxelWorldResource>,
     mut commands: Commands,
+    mut assets: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // Phase 1: collect positions to remove (in `spawned` but not in `world`)
-    let to_remove: Vec<[i32; 3]> = world_res
-        .spawned
-        .keys()
-        .copied()
-        .filter(|&pos| !world_res.world.contains(pos))
-        .collect();
+    let dirty = world_res.world.take_dirty();
+    if dirty.is_empty() {
+        return;
+    }
 
-    // Phase 2: despawn removed voxels
-    for pos in &to_remove {
-        if let Some(entity) = world_res.spawned.remove(pos) {
-            commands.entity(entity).despawn();
+    for cp in &dirty {
+        // Despawn this chunk's previous meshes.
+        if let Some(old) = world_res.spawned_chunks.remove(cp) {
+            for e in old {
+                commands.entity(e).despawn();
+            }
+        }
+
+        // A chunk that became empty has nothing to render.
+        if !world_res.world.has_chunk(cp) {
+            continue;
+        }
+
+        let faces = collect_chunk_faces(&world_res.world, cp);
+        let mut entities: Vec<Entity> = Vec::with_capacity(faces.len());
+        for fd in &faces {
+            let handle = build_chunk_mesh(fd, &mut assets);
+            let material = materials.add(StandardMaterial {
+                base_color: Color::srgb(fd.color[0], fd.color[1], fd.color[2]),
+                perceptual_roughness: 0.8,
+                metallic: 0.05,
+                ..default()
+            });
+            let entity = commands
+                .spawn((
+                    Mesh3d(handle),
+                    MeshMaterial3d(material),
+                    Transform::default(),
+                ))
+                .id();
+            entities.push(entity);
+        }
+        if !entities.is_empty() {
+            world_res.spawned_chunks.insert(*cp, entities);
         }
     }
+}
 
-    // Phase 3: collect positions to add (in `world` but not in `spawned`)
-    let to_add: Vec<([i32; 3], Color)> = world_res
-        .world
-        .iter()
-        .filter(|voxel| !world_res.spawned.contains_key(&voxel.position))
-        .map(|voxel| {
-            let color = Color::srgb(voxel.color[0], voxel.color[1], voxel.color[2]);
-            (voxel.position, color)
-        })
-        .collect();
-
-    // Phase 4: spawn new voxels, recording their entities
-    let cube_mesh = world_res.cube_mesh.clone();
-    for (pos, color) in to_add {
-        let material = materials.add(color);
-        let entity = commands
-            .spawn((
-                Mesh3d(cube_mesh.clone()),
-                MeshMaterial3d(material),
-                VoxelCube { position: pos },
-                Transform::from_xyz(pos[0] as f32, pos[1] as f32 + 0.5, pos[2] as f32),
-            ))
-            .id();
-        world_res.spawned.insert(pos, entity);
-    }
+/// Build a `Mesh3d` from a chunk face group, inserting vertex position, normal,
+/// UV, and triangle-index attributes.
+fn build_chunk_mesh(fd: &FaceData, assets: &mut Assets<Mesh>) -> Handle<Mesh> {
+    let mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+        .with_inserted_indices(Indices::U32(fd.indices.clone()))
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, fd.positions.clone())
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, fd.normals.clone())
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, fd.uvs.clone());
+    assets.add(mesh)
 }
 
 // --------------------------------------------------------------------------
@@ -162,14 +184,30 @@ pub fn move_camera(
     let sensitivity = 10.0 * time.delta_secs();
     let mut delta = Vec3::ZERO;
 
-    if input.pressed(KeyCode::KeyW) { delta += Vec3::Z; }
-    if input.pressed(KeyCode::KeyS) { delta -= Vec3::Z; }
-    if input.pressed(KeyCode::KeyA) { delta -= Vec3::X; }
-    if input.pressed(KeyCode::KeyD) { delta += Vec3::X; }
-    if input.pressed(KeyCode::KeyQ) { delta -= Vec3::Y; }
-    if input.pressed(KeyCode::KeyE) { delta += Vec3::Y; }
-    if input.pressed(KeyCode::KeyF) { delta -= Vec3::Y * 2.0; }
-    if input.pressed(KeyCode::KeyR) { delta += Vec3::Y * 2.0; }
+    if input.pressed(KeyCode::KeyW) {
+        delta += Vec3::Z;
+    }
+    if input.pressed(KeyCode::KeyS) {
+        delta -= Vec3::Z;
+    }
+    if input.pressed(KeyCode::KeyA) {
+        delta -= Vec3::X;
+    }
+    if input.pressed(KeyCode::KeyD) {
+        delta += Vec3::X;
+    }
+    if input.pressed(KeyCode::KeyQ) {
+        delta -= Vec3::Y;
+    }
+    if input.pressed(KeyCode::KeyE) {
+        delta += Vec3::Y;
+    }
+    if input.pressed(KeyCode::KeyF) {
+        delta -= Vec3::Y * 2.0;
+    }
+    if input.pressed(KeyCode::KeyR) {
+        delta += Vec3::Y * 2.0;
+    }
 
     if delta.length_squared() > 0.0 {
         let mut pos = transform.translation + delta * sensitivity;
@@ -190,7 +228,12 @@ pub fn move_camera(
 ///
 /// A single opaque textured plane avoids z-fighting (one depth value) and
 /// thin-line flicker (lines are baked into the texture and are multi-pixel).
-fn build_grid_texture(texels_per_cell: u32, cells: u32, minor_line: u32, major_line: u32) -> Image {
+fn build_grid_texture(
+    texels_per_cell: u32,
+    cells: u32,
+    minor_line: u32,
+    major_line: u32,
+) -> Image {
     let size = texels_per_cell * cells;
     let mut pixels: Vec<u8> = vec![0u8; (size * size * 4) as usize];
 
@@ -224,7 +267,11 @@ fn build_grid_texture(texels_per_cell: u32, cells: u32, minor_line: u32, major_l
     }
 
     Image::new(
-        Extent3d { width: size, height: size, depth_or_array_layers: 1 },
+        Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: 1,
+        },
         TextureDimension::D2,
         pixels,
         TextureFormat::Rgba8UnormSrgb,
@@ -243,7 +290,9 @@ pub fn setup_environment(
 ) {
     // Black opaque ground plane, slightly below the grid.
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(256.0, 256.0))),
+        Mesh3d(meshes.add(
+            Plane3d::default().mesh().size(256.0, 256.0)
+        )),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.02, 0.02, 0.06),
             unlit: true,
@@ -265,7 +314,9 @@ pub fn setup_environment(
         ..default()
     });
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(256.0, 256.0))),
+        Mesh3d(meshes.add(
+            Plane3d::default().mesh().size(256.0, 256.0)
+        )),
         MeshMaterial3d(grid_material),
         Transform::from_xyz(0.0, 0.02, 0.0)
             .looking_at(Vec3::ZERO, Vec3::Y)
@@ -278,11 +329,10 @@ pub fn setup_environment(
             shadow_maps_enabled: false,
             ..default()
         },
-        Transform::from_translation(Vec3::new(5.0, 10.0, 5.0))
-            .looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_translation(Vec3::new(5.0, 10.0, 5.0)).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
-    // Shared 1×1×1 cuboid mesh — reused for every voxel
+    // Shared 1×1×1 cuboid mesh handle (retained for any future per-voxel use).
     world_res.cube_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
 }
 
@@ -302,7 +352,7 @@ mod tests {
     fn test_voxel_world_resource_default() {
         let res = VoxelWorldResource::default();
         assert_eq!(res.world.voxel_count(), 0);
-        assert_eq!(res.spawned.len(), 0);
+        assert_eq!(res.spawned_chunks.len(), 0);
         assert_eq!(res.brush_color, [1.0, 0.0, 0.0]);
     }
 

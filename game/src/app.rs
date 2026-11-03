@@ -12,7 +12,7 @@ use crate::net::{
     ClientConnection, HeartbeatTimer, OutgoingEdits,
 };
 use crate::neighborhood::load_capitol_neighborhood;
-use crate::rendering::{setup_environment, sync_voxels_to_scene, VoxelWorldResource};
+use crate::rendering::{setup_environment, sync_chunk_meshes, VoxelWorldResource};
 
 /// The main game plugin.
 pub struct WarrenGamePlugin;
@@ -50,7 +50,7 @@ impl Plugin for WarrenGamePlugin {
                     send_queued_edits,
                     process_inbox,
                     heartbeat,
-                    sync_voxels_to_scene,
+                    sync_chunk_meshes,
                 ),
             );
     }

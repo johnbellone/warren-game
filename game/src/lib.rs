@@ -3,6 +3,7 @@
 //! Phases 3–5: rendering, networking, hotbar, HUD, and playable character.
 
 pub mod world;
+pub mod mesh;
 pub mod neighborhood;
 pub mod rendering;
 pub mod hotbar;
@@ -12,6 +13,10 @@ pub mod net;
 pub mod app;
 
 pub use app::WarrenGamePlugin;
+
+pub use rendering::{
+    setup_environment, sync_chunk_meshes, VoxelWorldResource,
+};
 
 pub use net::{
     init_net_connection, heartbeat, process_inbox, send_queued_edits, ClientConnection,
