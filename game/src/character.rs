@@ -36,6 +36,8 @@ pub struct CameraFollow;
 pub struct CharacterState {
     /// Whether the turntable spin is active.
     pub spinning: bool,
+    /// Last-known character world position (written by move_character, read by camera_follow_character).
+    pub position: Vec3,
 }
 
 /// Holds the `AnimationGraph` and its node indices for runtime switching.
@@ -146,6 +148,7 @@ pub fn switch_animation(
 }
 
 /// Moves the character via WASD (XZ) and Q/E (height); T toggles turntable.
+/// Also writes the character position to CharacterState for the camera follow system.
 pub fn move_character(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -173,21 +176,20 @@ pub fn move_character(
         if state.spinning {
             t.rotate_y(speed * 0.8);
         }
+        // Cache position for the camera follow system (avoids &mut -> & read conflict on Transform)
+        state.position = t.translation;
     }
 }
 
-/// Smoothly follows the character from behind and above.
+/// Smoothly follows the character using the position read from CharacterState (no Transform conflict).
 pub fn camera_follow_character(
     time: Res<Time>,
-    char_q: Query<&Transform, With<Character>>,
+    state: Res<CharacterState>,
     mut cam_q: Query<&mut Transform, With<CameraFollow>>,
 ) {
-    if let Ok(char_t) = char_q.single() {
-        let target = char_t.translation + Vec3::new(0.0, 2.5, 4.0);
-        for mut cam_t in &mut cam_q {
-            cam_t.translation =
-                cam_t.translation.lerp(target, 3.0 * time.delta_secs());
-            cam_t.look_at(char_t.translation, Vec3::Y);
-        }
+    let target = state.position + Vec3::new(0.0, 2.5, 4.0);
+    for mut cam_t in &mut cam_q {
+        cam_t.translation = cam_t.translation.lerp(target, 3.0 * time.delta_secs());
+        cam_t.look_at(state.position, Vec3::Y);
     }
 }

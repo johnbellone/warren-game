@@ -42,15 +42,9 @@ impl Plugin for WarrenGamePlugin {
             )
             .add_systems(
                 Update,
-                move_character,
-            )
-            .add_systems(
-                Update,
-                camera_follow_character.after(move_character),
-            )
-            .add_systems(
-                Update,
                 (
+                    move_character,
+                    camera_follow_character,
                     switch_animation,
                     update_hotbar,
                     move_camera,
