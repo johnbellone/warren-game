@@ -429,12 +429,13 @@ pub fn raycast_voxels(origin: Vec3, direction: Vec3, world: &crate::world::Voxel
     let mut best_dist = f32::INFINITY;
     let mut best: Option<([i32; 3], [i32; 3])> = None;
 
-    for pos in world.voxels.keys() {
-        let (hit_dist, face) = intersect_voxel_aabb(pos, origin, direction);
+    for v in world.iter() {
+        let pos = v.position;
+        let (hit_dist, face) = intersect_voxel_aabb(&pos, origin, direction);
         if let Some((d, f)) = hit_dist.zip(face) {
             if d < best_dist {
                 best_dist = d;
-                best = Some((*pos, f));
+                best = Some((pos, f));
             }
         }
     }

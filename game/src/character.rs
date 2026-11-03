@@ -271,7 +271,7 @@ pub fn camera_orbit(
     mut orbit: ResMut<CameraOrbitState>,
 ) {
     let turn_speed = 1.5 * time.delta_secs();
-    let zoom_speed = 3.0 * time.delta_secs();
+    let zoom_speed = 20.0 * time.delta_secs();
 
     if keys.pressed(KeyCode::ArrowLeft) {
         orbit.angle -= turn_speed;
@@ -280,10 +280,10 @@ pub fn camera_orbit(
         orbit.angle += turn_speed;
     }
     if keys.pressed(KeyCode::ArrowUp) {
-        orbit.distance = (orbit.distance - zoom_speed).clamp(1.5, 20.0);
+        orbit.distance = (orbit.distance - zoom_speed).clamp(1.5, 180.0);
     }
     if keys.pressed(KeyCode::ArrowDown) {
-        orbit.distance = (orbit.distance + zoom_speed).clamp(1.5, 20.0);
+        orbit.distance = (orbit.distance + zoom_speed).clamp(1.5, 180.0);
     }
 }
 

@@ -65,7 +65,7 @@ pub fn sync_voxels_to_scene(
         .spawned
         .keys()
         .copied()
-        .filter(|&pos| !world_res.world.voxels.contains_key(&pos))
+        .filter(|&pos| !world_res.world.contains(pos))
         .collect();
 
     // Phase 2: despawn removed voxels
@@ -78,12 +78,11 @@ pub fn sync_voxels_to_scene(
     // Phase 3: collect positions to add (in `world` but not in `spawned`)
     let to_add: Vec<([i32; 3], Color)> = world_res
         .world
-        .voxels
         .iter()
-        .filter(|(pos, _)| !world_res.spawned.contains_key(*pos))
-        .map(|(pos, voxel)| {
+        .filter(|voxel| !world_res.spawned.contains_key(&voxel.position))
+        .map(|voxel| {
             let color = Color::srgb(voxel.color[0], voxel.color[1], voxel.color[2]);
-            (*pos, color)
+            (voxel.position, color)
         })
         .collect();
 

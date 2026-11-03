@@ -11,6 +11,7 @@ use crate::net::{
     handle_click_net, heartbeat, init_net_connection, process_inbox, send_queued_edits,
     ClientConnection, HeartbeatTimer, OutgoingEdits,
 };
+use crate::neighborhood::load_capitol_neighborhood;
 use crate::rendering::{setup_environment, sync_voxels_to_scene, VoxelWorldResource};
 
 /// The main game plugin.
@@ -32,6 +33,7 @@ impl Plugin for WarrenGamePlugin {
                     setup_environment,
                     spawn_follower_camera,
                     spawn_character,
+                    load_capitol_neighborhood,
                     init_net_connection,
                 ),
             )

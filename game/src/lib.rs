@@ -3,6 +3,7 @@
 //! Phases 3–5: rendering, networking, hotbar, HUD, and playable character.
 
 pub mod world;
+pub mod neighborhood;
 pub mod rendering;
 pub mod hotbar;
 pub mod hotbar_hud;
