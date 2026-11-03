@@ -1,4 +1,7 @@
 ## 2026-11-03
+* **Update**: Linked `rendering/weft-renderscene.md` to `components-game.md` (Concrete implementation of the playable character entity and environment rendering described by components-game).
+* **Update**: Linked `rendering/weft-renderscene.md` to `weft-analysis.md` (Corrects and extends the weft-analysis Bevy 0.20 translation table with actual verified API (base_color_texture, emissive LinearRgba, single-plane textured grid, auto-walk animation)).
+* **Creation**: Documented concept `rendering/weft-renderscene.md` (Warren-Game Bevy 0.20 Rendering & Animation Decisions).
 * **Update**: Linked `meshem-analysis.md` to `components-editor.md` (bevy_meshem is the rendering layer for the editor's voxel data model. The Mantine UI triggers voxel edits that feed into meshem's VoxelChange journal and update_mesh().).
 * **Update**: Linked `meshem-analysis.md` to `texture-loader-crates.md` (bevy_meshem generates mesh geometry from a voxel grid; texture-loader-crates handles the texture atlas and model data that meshem applies as vertex attributes. Together, they form the full voxel rendering pipeline.).
 * **Creation**: Documented concept `meshem-analysis.md` (bevy_meshem — Voxel Grid to Bevy Mesh Generation).
