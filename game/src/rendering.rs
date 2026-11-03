@@ -181,20 +181,80 @@ pub fn move_camera(
 // Setup helpers
 // --------------------------------------------------------------------------
 
-/// Spawns the ground plane, a directional light, and the shared cuboid mesh.
+/// Spawns a black ground plane with a wireframe grid overlay (3D-editor style),
+/// a directional light, and the shared 1×1×1 cuboid mesh.
 pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut world_res: ResMut<VoxelWorldResource>,
 ) {
-    // Ground plane
+    // Black ground plane
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(100.0, 100.0))),
-        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(200.0, 200.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.02, 0.02, 0.06),
+            emissive: Color::srgb(0.01, 0.01, 0.03).into(),
+            ..default()
+        })),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
         Ground,
     ));
+
+    // Wireframe grid — 1 m spacing, 50 units in each direction.
+    // Two shared thin-cuboid meshes (X-run and Z-run) and two materials
+    // (grid lines, origin cross) to avoid per-line duplication.
+    let grid = 50;
+    let thickness = 0.015f32;
+    let span = grid as f32 * 2.0;
+
+    let bar_x = meshes.add(Cuboid::new(span, thickness, thickness));
+    let bar_z = meshes.add(Cuboid::new(thickness, thickness, span));
+    let line_mat   = StandardMaterial { base_color: Color::srgb(0.12, 0.12, 0.18), emissive: Color::srgb(0.08, 0.08, 0.12).into(), ..default() };
+    let origin_mat = StandardMaterial { base_color: Color::srgb(0.35, 0.6, 1.0),  emissive: Color::srgb(0.20, 0.4, 1.0).into(), ..default() };
+    let line_mat_handle   = materials.add(line_mat);
+    let origin_mat_handle = materials.add(origin_mat);
+
+    for i in 1..=grid {
+        let z = i as f32;
+        // Two lines per cell: +Z and -Z
+        commands.spawn((
+            Mesh3d(bar_x.clone()),
+            MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
+            Transform::from_xyz(0.0, 0.001, z),
+        ));
+        commands.spawn((
+            Mesh3d(bar_x.clone()),
+            MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
+            Transform::from_xyz(0.0, 0.001, -z),
+        ));
+        commands.spawn((
+            Mesh3d(bar_z.clone()),
+            MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
+            Transform::from_xyz(z, 0.001, 0.0),
+        ));
+        commands.spawn((
+            Mesh3d(bar_z.clone()),
+            MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
+            Transform::from_xyz(-z, 0.001, 0.0),
+        ));
+    }
+
+    // Minor grid lines (every 1 m, dimmer, non-origin)
+    for i in -(grid)..=grid {
+        if i == 0 { continue; }
+        let p = i as f32;
+        commands.spawn((
+            Mesh3d(bar_x.clone()),
+            MeshMaterial3d(line_mat_handle.clone()),
+            Transform::from_xyz(0.0, 0.001, p),
+        ));
+        commands.spawn((
+            Mesh3d(bar_z.clone()),
+            MeshMaterial3d(line_mat_handle.clone()),
+            Transform::from_xyz(p, 0.001, 0.0),
+        ));
+    }
 
     // Directional light
     commands.spawn((
