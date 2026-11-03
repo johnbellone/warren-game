@@ -18,7 +18,7 @@ name = "warren-game-app"
 path = "src/main.rs"
 
 [dependencies]
-bevy = { workspace = true }
+bevy = { workspace = true, features = ["bevy_gltf", "gltf_animation"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
