@@ -1,6 +1,8 @@
 //! Rendering layer: VoxelWorldResource, VoxelCube component, and sync systems.
 
 use bevy::prelude::*;
+use bevy::asset::RenderAssetUsages;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use std::collections::HashMap;
 
 use crate::character::CameraFollow;
@@ -181,104 +183,97 @@ pub fn move_camera(
 // Setup helpers
 // --------------------------------------------------------------------------
 
-/// Spawns a black ground plane with a wireframe grid overlay (3D-editor style),
-/// a directional light, and the shared 1×1×1 cuboid mesh.
+/// Builds a grid texture procedurally, returned as a top-down `Image` (RGBA8).
+///
+/// * background               – dark slate
+/// * minor lines (every 1 m)  – dim grey, 1 texel thick
+/// * major lines (every 10 m) – bright blue, 2 texel thick
+///
+/// A single opaque textured plane avoids z-fighting (one depth value) and
+/// thin-line flicker (lines are baked into the texture and are multi-pixel).
+fn build_grid_texture(texels_per_cell: u32, cells: u32, minor_line: u32, major_line: u32) -> Image {
+    let size = texels_per_cell * cells;
+    let mut pixels: Vec<u8> = vec![0u8; (size * size * 4) as usize];
+
+    let bg: [u8; 3] = [16, 16, 24];
+    let minor: [u8; 3] = [60, 64, 80];
+    let major: [u8; 3] = [100, 165, 255];
+
+    // A major line spans `major_line` texels at every 10-th cell boundary.
+    let major_stride = texels_per_cell * 10;
+
+    for y in 0..size {
+        for x in 0..size {
+            let rgb = if x.rem_euclid(major_stride) < major_line
+                || y.rem_euclid(major_stride) < major_line
+            {
+                major
+            } else if x.rem_euclid(texels_per_cell) < minor_line
+                || y.rem_euclid(texels_per_cell) < minor_line
+            {
+                minor
+            } else {
+                bg
+            };
+
+            let i = ((y * size + x) * 4) as usize;
+            pixels[i] = rgb[0];
+            pixels[i + 1] = rgb[1];
+            pixels[i + 2] = rgb[2];
+            pixels[i + 3] = 255;
+        }
+    }
+
+    Image::new(
+        Extent3d { width: size, height: size, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        pixels,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    )
+}
+
+/// Spawns a dark ground plane with a tiled wireframe grid overlay, a directional
+/// light, and the shared 1×1×1 cuboid mesh.
 pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut textures: ResMut<Assets<Image>>,
     mut world_res: ResMut<VoxelWorldResource>,
 ) {
-    // Black ground plane
+    // Black opaque ground plane, slightly below the grid.
     commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(200.0, 200.0))),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(256.0, 256.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.02, 0.02, 0.06),
-            emissive: Color::srgb(0.01, 0.01, 0.03).into(),
             unlit: true,
             ..default()
         })),
-        // y = -0.01 : just below grid lines to prevent z-fighting
-        Transform::from_xyz(0.0, -0.01, 0.0)
+        Transform::from_xyz(0.0, -0.05, 0.0)
             .looking_at(Vec3::ZERO, Vec3::Y)
             .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
         Ground,
     ));
 
-    // Wireframe grid — 1 m spacing, 50 units each direction.
-    // Grid lines are unlit, 0.1 m thick, at y = 0.05 to avoid z-fighting.
-    let grid = 50;
-    let thickness = 0.1f32;
-    let span = grid as f32 * 2.0;
-    let grid_y = 0.05f32;
-
-    let bar_x = meshes.add(Cuboid::new(span, thickness, thickness));
-    let bar_z = meshes.add(Cuboid::new(thickness, thickness, span));
-    let minor_mat = StandardMaterial {
-        base_color: Color::srgb(0.15, 0.15, 0.20),
+    // Grid: 1 texel-per-meter, 256 cells → 256 m wide. Lines baked into the
+    // texture. minor_line=2, major_line=4 texels keeps lines crisp at distance.
+    let grid_image = build_grid_texture(1, 256, 2, 4);
+    let grid_texture = textures.add(grid_image);
+    let grid_material = materials.add(StandardMaterial {
+        base_color_texture: Some(grid_texture),
         unlit: true,
         ..default()
-    };
-    let major_mat = StandardMaterial {
-        base_color: Color::srgb(0.4, 0.65, 1.0),
-        unlit: true,
-        ..default()
-    };
-    let minor_handle = materials.add(minor_mat);
-    let major_handle = materials.add(major_mat);
+    });
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(256.0, 256.0))),
+        MeshMaterial3d(grid_material),
+        Transform::from_xyz(0.0, 0.02, 0.0)
+            .looking_at(Vec3::ZERO, Vec3::Y)
+            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+    ));
 
-    for i in 1..=grid {
-        let z = i as f32;
-        // Origin cross lines (bright blue) at major intervals
-        commands.spawn((
-            Mesh3d(bar_x.clone()),
-            MeshMaterial3d(major_handle.clone()),
-            Transform::from_xyz(0.0, grid_y, z),
-        ));
-        commands.spawn((
-            Mesh3d(bar_x.clone()),
-            MeshMaterial3d(major_handle.clone()),
-            Transform::from_xyz(0.0, grid_y, -z),
-        ));
-        commands.spawn((
-            Mesh3d(bar_z.clone()),
-            MeshMaterial3d(major_handle.clone()),
-            Transform::from_xyz(z, grid_y, 0.0),
-        ));
-        commands.spawn((
-            Mesh3d(bar_z.clone()),
-            MeshMaterial3d(major_handle.clone()),
-            Transform::from_xyz(-z, grid_y, 0.0),
-        ));
-    }
-
-    // Minor grid lines (every 1 m between the major lines)
-    // Note: major lines are at integer positions, so skip them in this loop
-    for i in 1..grid {
-        let p = i as f32;
-        commands.spawn((
-            Mesh3d(bar_x.clone()),
-            MeshMaterial3d(minor_handle.clone()),
-            Transform::from_xyz(0.0, grid_y, p),
-        ));
-        commands.spawn((
-            Mesh3d(bar_x.clone()),
-            MeshMaterial3d(minor_handle.clone()),
-            Transform::from_xyz(0.0, grid_y, -p),
-        ));
-        commands.spawn((
-            Mesh3d(bar_z.clone()),
-            MeshMaterial3d(minor_handle.clone()),
-            Transform::from_xyz(p, grid_y, 0.0),
-        ));
-        commands.spawn((
-            Mesh3d(bar_z.clone()),
-            MeshMaterial3d(minor_handle.clone()),
-            Transform::from_xyz(-p, grid_y, 0.0),
-        ));
-    }
-
-    // Directional light
+    // Directional light (shadows off for performance).
     commands.spawn((
         DirectionalLight {
             shadow_maps_enabled: false,

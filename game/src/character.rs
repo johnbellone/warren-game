@@ -3,12 +3,13 @@
 //! Loaded as a glTF scene with an `AnimationGraph` (one node per clip).
 //!
 //! Controls:
-//!   – WASD   : move character on the XZ plane
-//!   – Q / E  : adjust height (y-axis)
-//!   – 1–7    : switch animation clip
+//!   – WASD   : move the character on the XZ plane (auto-plays Walk / Idle)
+//!   – Q / E  : adjust height (does not trigger Walk)
+//!   – 1–7    : manually select and lock a clip (Walk, Run, Jump, …)
+//!   – M      : return to auto Walk/Idle control
 //!   – T      : toggle turntable spin
 //!
-//! The main camera follows the character from slightly behind and above.
+//! The main camera follows the character from slightly behind and above
 
 use bevy::prelude::*;
 use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex};
@@ -36,7 +37,15 @@ pub struct CameraFollow;
 pub struct CharacterState {
     /// Whether the turntable spin is active.
     pub spinning: bool,
-    /// Last-known character world position (written by move_character, read by camera_follow_character).
+    /// True while WASD is being held (used to auto-play the Walk clip).
+    pub moving: bool,
+    /// When true, a manually selected clip (1–7) is held; auto walk/idle is off.
+    pub manual: bool,
+    /// Index of the last clip auto-played (0 = Idle, 1 = Walk) to avoid
+    /// re-triggering play() every frame.
+    pub last_auto: usize,
+    /// Last-known character world position (written by move_character,
+    /// read by camera_follow_character).
     pub position: Vec3,
 }
 
@@ -141,9 +150,13 @@ fn start_character_animation(
 // --------------------------------------------------------------------------
 
 /// Switches the active animation clip on keypress (keys 1–7).
+///
+/// Selecting a clip with 1–7 locks it (manual mode) so the walk/idle auto-
+/// switcher doesn't override it. Press **M** to return to auto walk/idle.
 pub fn switch_animation(
     keys: Res<ButtonInput<KeyCode>>,
     clips: Res<CharacterClips>,
+    mut state: ResMut<CharacterState>,
     mut players: Query<&mut AnimationPlayer>,
 ) {
     const KEYS: [KeyCode; 7] = [
@@ -158,6 +171,7 @@ pub fn switch_animation(
     for (i, key) in KEYS.iter().enumerate() {
         if keys.just_pressed(*key) {
             if let Some(node) = clips.nodes.get(i) {
+                state.manual = true;
                 for mut player in &mut players {
                     player.stop_all();
                     player.play(*node).repeat();
@@ -165,6 +179,37 @@ pub fn switch_animation(
             }
             info!("Playing animation: {}", CLIPS[i]);
         }
+    }
+
+    // M toggles back to auto walk/idle control.
+    if keys.just_pressed(KeyCode::KeyM) {
+        state.manual = false;
+        info!("Animation control: auto (walk/idle)");
+    }
+}
+
+/// Auto-switches between Idle and Walk based on whether the character is moving.
+/// Only replays a clip when the target changes, so it doesn't restart every
+/// frame. Skipped while a manual clip is selected (press M to resume auto).
+pub fn auto_animation(
+    clips: Res<CharacterClips>,
+    mut state: ResMut<CharacterState>,
+    mut players: Query<&mut AnimationPlayer>,
+) {
+    if state.manual || clips.nodes.is_empty() {
+        return;
+    }
+
+    let target = if state.moving { 1 } else { 0 }; // 1 = Walk, 0 = Idle
+    if target == state.last_auto {
+        return;
+    }
+    if let Some(node) = clips.nodes.get(target) {
+        for mut player in &mut players {
+            player.stop_all();
+            player.play(*node).repeat();
+        }
+        state.last_auto = target;
     }
 }
 
@@ -190,9 +235,25 @@ pub fn move_character(
     if keys.pressed(KeyCode::KeyQ) { move_dir.y -= 1.0; }
     if keys.pressed(KeyCode::KeyE) { move_dir.y += 1.0; }
 
+    // Horizontal components drive movement + walk animation;
+    // Q/E move vertically without triggering walk.
+    let horizontal = Vec3::new(move_dir.x, 0.0, move_dir.z);
+    let moving = horizontal != Vec3::ZERO;
+    state.moving = moving;
+
     for mut t in &mut chars {
-        if move_dir != Vec3::ZERO {
-            t.translation += move_dir * speed;
+        if moving {
+            let dir = horizontal / horizontal.length();
+            t.translation.x += dir.x * speed;
+            t.translation.z += dir.z * speed;
+            // Face the movement direction on the XZ plane (+Z is assumed forward
+            // in the glTF model; flip this sign if the model faces -Z).
+            let current_yaw = t.rotation.y;
+            let target_yaw = dir.x.atan2(dir.z);
+            t.rotate(Quat::from_rotation_y(target_yaw - current_yaw));
+        }
+        if move_dir.y != 0.0 {
+            t.translation.y += move_dir.y * speed;
         }
         if state.spinning {
             t.rotate_y(speed * 0.8);

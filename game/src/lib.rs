@@ -21,6 +21,7 @@ pub use hotbar::{update_hotbar, BlockPreset, Hotbar};
 pub use hotbar_hud::{update_hotbar_hud, HotbarHudState, spawn_hotbar_hud};
 
 pub use character::{
-    camera_follow_character, camera_orbit, move_character, spawn_character, spawn_follower_camera,
-    switch_animation, CameraFollow, Character, CharacterClips, CharacterState, CameraOrbitState,
+    auto_animation, camera_follow_character, camera_orbit, move_character, spawn_character,
+    spawn_follower_camera, switch_animation, CameraFollow, Character, CharacterClips,
+    CharacterState, CameraOrbitState,
 };

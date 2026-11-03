@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::character::{
     camera_follow_character, camera_orbit, move_character, spawn_character, spawn_follower_camera,
-    switch_animation, CameraOrbitState, CharacterClips, CharacterState,
+    switch_animation, auto_animation, CameraOrbitState, CharacterClips, CharacterState,
 };
 use crate::hotbar::{Hotbar, update_hotbar};
 use crate::net::{
@@ -42,6 +42,7 @@ impl Plugin for WarrenGamePlugin {
                     camera_orbit,
                     camera_follow_character,
                     switch_animation,
+                    auto_animation,
                     update_hotbar,
                     handle_click_net,
                     send_queued_edits,
