@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
 
+use crate::character::CameraFollow;
 use crate::hotbar::Hotbar;
 use crate::rendering::VoxelWorldResource;
 use warren_protocol::{ClientMsg, PeerInfo, ServerMsg, VoxelEdit};
@@ -302,14 +303,17 @@ pub fn send_queued_edits(conn: Res<ClientConnection>, mut outgoing: ResMut<Outgo
 ///
 /// Uses the currently selected Hotbar preset for the placed block color.
 pub fn handle_click_net(
-    camera: Single<(&Camera, &GlobalTransform)>,
+    cameras: Query<(&Camera, &GlobalTransform), Without<CameraFollow>>,
     window: Single<&Window>,
     input: Res<ButtonInput<MouseButton>>,
     hotbar: Res<Hotbar>,
     mut world_res: ResMut<VoxelWorldResource>,
     mut outgoing: ResMut<OutgoingEdits>,
 ) {
-    let (camera, camera_tf) = camera.into_inner();
+    let (cam, cam_tf) = match cameras.iter().next() {
+        Some((c, t)) => (c, t),
+        None => return,
+    };
     let window = *window;
 
     let just_left = input.just_pressed(MouseButton::Left);
@@ -322,7 +326,7 @@ pub fn handle_click_net(
         return;
     };
 
-    let Ok(ray) = camera.viewport_to_world(camera_tf, cursor) else {
+    let Ok(ray) = cam.viewport_to_world(cam_tf, cursor) else {
         return;
     };
 
