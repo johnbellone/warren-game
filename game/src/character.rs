@@ -40,6 +40,23 @@ pub struct CharacterState {
     pub position: Vec3,
 }
 
+/// Tracks orbit camera state: azimuthal angle and zoom distance.
+#[derive(Resource)]
+pub struct CameraOrbitState {
+    /// Y-axis orbit angle in radians (0 = behind character).
+    pub angle: f32,
+    /// Distance from character (camera zoom).
+    pub distance: f32,
+    /// Height above the character (constant vertical offset).
+    pub height: f32,
+}
+
+impl Default for CameraOrbitState {
+    fn default() -> Self {
+        Self { angle: 0.0, distance: 5.0, height: 2.5 }
+    }
+}
+
 /// Holds the `AnimationGraph` and its node indices for runtime switching.
 #[derive(Resource, Default)]
 pub struct CharacterClips {
@@ -55,7 +72,8 @@ pub struct CharacterClips {
 pub fn spawn_follower_camera(mut commands: Commands) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.0, 3.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
+        // Initial position: 5 m behind and 2.5 m above the character at origin
+        Transform::from_xyz(0.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
         CameraFollow,
     ));
 }
@@ -181,15 +199,50 @@ pub fn move_character(
     }
 }
 
-/// Smoothly follows the character using the position read from CharacterState (no Transform conflict).
+/// ArrowLeft / ArrowRight orbit the camera around the character.
+/// ArrowUp zooms in; ArrowDown zooms out.
+pub fn camera_orbit(
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut orbit: ResMut<CameraOrbitState>,
+) {
+    let turn_speed = 1.5 * time.delta_secs();
+    let zoom_speed = 3.0 * time.delta_secs();
+
+    if keys.pressed(KeyCode::ArrowLeft) {
+        orbit.angle -= turn_speed;
+    }
+    if keys.pressed(KeyCode::ArrowRight) {
+        orbit.angle += turn_speed;
+    }
+    if keys.pressed(KeyCode::ArrowUp) {
+        orbit.distance = (orbit.distance - zoom_speed).clamp(1.5, 20.0);
+    }
+    if keys.pressed(KeyCode::ArrowDown) {
+        orbit.distance = (orbit.distance + zoom_speed).clamp(1.5, 20.0);
+    }
+}
+
+/// Smoothly follows the character using orbit state (angle + distance) and CharacterState.
 pub fn camera_follow_character(
     time: Res<Time>,
     state: Res<CharacterState>,
+    orbit: Res<CameraOrbitState>,
     mut cam_q: Query<&mut Transform, With<CameraFollow>>,
 ) {
-    let target = state.position + Vec3::new(0.0, 2.5, 4.0);
+    // Camera offset from character in spherical coordinates
+    let dx = orbit.angle.cos() * orbit.distance;
+    let dz = orbit.angle.sin() * orbit.distance;
+    let target = Vec3::new(
+        state.position.x + dx,
+        state.position.y + orbit.height,
+        state.position.z + dz,
+    );
     for mut cam_t in &mut cam_q {
-        cam_t.translation = cam_t.translation.lerp(target, 3.0 * time.delta_secs());
-        cam_t.look_at(state.position, Vec3::Y);
+        cam_t.translation = cam_t.translation.lerp(target, 5.0 * time.delta_secs());
+        cam_t.look_at(
+            Vec3::new(state.position.x, state.position.y + 0.9, state.position.z),
+            Vec3::Y,
+        );
     }
 }

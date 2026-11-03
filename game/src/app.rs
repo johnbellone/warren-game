@@ -3,8 +3,8 @@
 use bevy::prelude::*;
 
 use crate::character::{
-    camera_follow_character, move_character, spawn_character, spawn_follower_camera,
-    switch_animation, CharacterClips, CharacterState,
+    camera_follow_character, camera_orbit, move_character, spawn_character, spawn_follower_camera,
+    switch_animation, CameraOrbitState, CharacterClips, CharacterState,
 };
 use crate::hotbar::{Hotbar, update_hotbar};
 use crate::net::{
@@ -25,6 +25,7 @@ impl Plugin for WarrenGamePlugin {
             .init_resource::<Hotbar>()
             .init_resource::<CharacterState>()
             .init_resource::<CharacterClips>()
+            .init_resource::<CameraOrbitState>()
             .add_systems(
                 Startup,
                 (
@@ -38,6 +39,7 @@ impl Plugin for WarrenGamePlugin {
                 Update,
                 (
                     move_character,
+                    camera_orbit,
                     camera_follow_character,
                     switch_animation,
                     update_hotbar,

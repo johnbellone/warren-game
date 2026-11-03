@@ -195,18 +195,22 @@ pub fn setup_environment(
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.02, 0.02, 0.06),
             emissive: Color::srgb(0.01, 0.01, 0.03).into(),
+            unlit: true,
             ..default()
         })),
-        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+        // y = -0.01 : just below grid lines to prevent z-fighting
+        Transform::from_xyz(0.0, -0.01, 0.0)
+            .looking_at(Vec3::ZERO, Vec3::Y)
+            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
         Ground,
     ));
 
     // Wireframe grid — 1 m spacing, 50 units in each direction.
-    // Two shared thin-cuboid meshes (X-run and Z-run) and two materials
-    // (grid lines, origin cross) to avoid per-line duplication.
+    // y = 0.02 to avoid z-fighting with the ground plane at y = 0.
     let grid = 50;
-    let thickness = 0.015f32;
+    let thickness = 0.04f32;
     let span = grid as f32 * 2.0;
+    let grid_y = 0.02f32;
 
     let bar_x = meshes.add(Cuboid::new(span, thickness, thickness));
     let bar_z = meshes.add(Cuboid::new(thickness, thickness, span));
@@ -221,22 +225,22 @@ pub fn setup_environment(
         commands.spawn((
             Mesh3d(bar_x.clone()),
             MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
-            Transform::from_xyz(0.0, 0.001, z),
+            Transform::from_xyz(0.0, grid_y, z),
         ));
         commands.spawn((
             Mesh3d(bar_x.clone()),
             MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
-            Transform::from_xyz(0.0, 0.001, -z),
+            Transform::from_xyz(0.0, grid_y, -z),
         ));
         commands.spawn((
             Mesh3d(bar_z.clone()),
             MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
-            Transform::from_xyz(z, 0.001, 0.0),
+            Transform::from_xyz(z, grid_y, 0.0),
         ));
         commands.spawn((
             Mesh3d(bar_z.clone()),
             MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
-            Transform::from_xyz(-z, 0.001, 0.0),
+            Transform::from_xyz(-z, grid_y, 0.0),
         ));
     }
 
@@ -247,12 +251,12 @@ pub fn setup_environment(
         commands.spawn((
             Mesh3d(bar_x.clone()),
             MeshMaterial3d(line_mat_handle.clone()),
-            Transform::from_xyz(0.0, 0.001, p),
+            Transform::from_xyz(0.0, grid_y, p),
         ));
         commands.spawn((
             Mesh3d(bar_z.clone()),
             MeshMaterial3d(line_mat_handle.clone()),
-            Transform::from_xyz(p, 0.001, 0.0),
+            Transform::from_xyz(p, grid_y, 0.0),
         ));
     }
 
