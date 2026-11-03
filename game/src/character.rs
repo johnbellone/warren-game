@@ -85,12 +85,12 @@ pub fn spawn_follower_camera(mut commands: Commands) {
 /// Spawns the character model and its animation graph on the first frame.
 pub fn spawn_character(
     mut commands: Commands,
-    existing: Query<Option<&Character>>,
+    existing: Query<&Character>,
     asset_server: Res<AssetServer>,
     mut graphs: ResMut<Assets<AnimationGraph>>,
     mut clips_res: ResMut<CharacterClips>,
 ) {
-    // Guard: don't spawn twice.
+    // Query<&T> matches only entities that have T, so is_empty() is true at startup.
     if !existing.is_empty() {
         return;
     }
@@ -107,6 +107,7 @@ pub fn spawn_character(
     commands
         .spawn((
             Character,
+            Transform::default(),  // gives move_character a target to mutate
             WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(MODEL))),
         ))
         .observe(start_character_animation);
@@ -123,6 +124,8 @@ fn start_character_animation(
     if clips.nodes.is_empty() {
         return;
     }
+    let count = children.iter_descendants(ready.entity).count();
+    info!("Character instance ready: {} descendant entities", count);
     for entity in children.iter_descendants(ready.entity) {
         if let Ok(mut player) = players.get_mut(entity) {
             player.play(clips.nodes[0]).repeat();

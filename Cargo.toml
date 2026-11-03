@@ -26,3 +26,8 @@ bevy = "0.20"
 
 [workspace.dependencies.wasm-bindgen]
 version = "0.2"
+
+# Reduce eh_frame section size in macOS ARM64 debug builds.
+# Bevy debug binaries can exceed 16 MB eh_frame, causing a linker warning.
+[profile.dev]
+debug = "line-tables-only"

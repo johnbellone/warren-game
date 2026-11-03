@@ -205,58 +205,76 @@ pub fn setup_environment(
         Ground,
     ));
 
-    // Wireframe grid — 1 m spacing, 50 units in each direction.
-    // y = 0.02 to avoid z-fighting with the ground plane at y = 0.
+    // Wireframe grid — 1 m spacing, 50 units each direction.
+    // Grid lines are unlit, 0.1 m thick, at y = 0.05 to avoid z-fighting.
     let grid = 50;
-    let thickness = 0.04f32;
+    let thickness = 0.1f32;
     let span = grid as f32 * 2.0;
-    let grid_y = 0.02f32;
+    let grid_y = 0.05f32;
 
     let bar_x = meshes.add(Cuboid::new(span, thickness, thickness));
     let bar_z = meshes.add(Cuboid::new(thickness, thickness, span));
-    let line_mat   = StandardMaterial { base_color: Color::srgb(0.12, 0.12, 0.18), emissive: Color::srgb(0.08, 0.08, 0.12).into(), ..default() };
-    let origin_mat = StandardMaterial { base_color: Color::srgb(0.35, 0.6, 1.0),  emissive: Color::srgb(0.20, 0.4, 1.0).into(), ..default() };
-    let line_mat_handle   = materials.add(line_mat);
-    let origin_mat_handle = materials.add(origin_mat);
+    let minor_mat = StandardMaterial {
+        base_color: Color::srgb(0.15, 0.15, 0.20),
+        unlit: true,
+        ..default()
+    };
+    let major_mat = StandardMaterial {
+        base_color: Color::srgb(0.4, 0.65, 1.0),
+        unlit: true,
+        ..default()
+    };
+    let minor_handle = materials.add(minor_mat);
+    let major_handle = materials.add(major_mat);
 
     for i in 1..=grid {
         let z = i as f32;
-        // Two lines per cell: +Z and -Z
+        // Origin cross lines (bright blue) at major intervals
         commands.spawn((
             Mesh3d(bar_x.clone()),
-            MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
+            MeshMaterial3d(major_handle.clone()),
             Transform::from_xyz(0.0, grid_y, z),
         ));
         commands.spawn((
             Mesh3d(bar_x.clone()),
-            MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
+            MeshMaterial3d(major_handle.clone()),
             Transform::from_xyz(0.0, grid_y, -z),
         ));
         commands.spawn((
             Mesh3d(bar_z.clone()),
-            MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
+            MeshMaterial3d(major_handle.clone()),
             Transform::from_xyz(z, grid_y, 0.0),
         ));
         commands.spawn((
             Mesh3d(bar_z.clone()),
-            MeshMaterial3d(origin_mat_handle.clone()),  // brighter origin line
+            MeshMaterial3d(major_handle.clone()),
             Transform::from_xyz(-z, grid_y, 0.0),
         ));
     }
 
-    // Minor grid lines (every 1 m, dimmer, non-origin)
-    for i in -(grid)..=grid {
-        if i == 0 { continue; }
+    // Minor grid lines (every 1 m between the major lines)
+    // Note: major lines are at integer positions, so skip them in this loop
+    for i in 1..grid {
         let p = i as f32;
         commands.spawn((
             Mesh3d(bar_x.clone()),
-            MeshMaterial3d(line_mat_handle.clone()),
+            MeshMaterial3d(minor_handle.clone()),
             Transform::from_xyz(0.0, grid_y, p),
         ));
         commands.spawn((
+            Mesh3d(bar_x.clone()),
+            MeshMaterial3d(minor_handle.clone()),
+            Transform::from_xyz(0.0, grid_y, -p),
+        ));
+        commands.spawn((
             Mesh3d(bar_z.clone()),
-            MeshMaterial3d(line_mat_handle.clone()),
+            MeshMaterial3d(minor_handle.clone()),
             Transform::from_xyz(p, grid_y, 0.0),
+        ));
+        commands.spawn((
+            Mesh3d(bar_z.clone()),
+            MeshMaterial3d(minor_handle.clone()),
+            Transform::from_xyz(-p, grid_y, 0.0),
         ));
     }
 
