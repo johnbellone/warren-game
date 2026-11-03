@@ -3,6 +3,9 @@
 use bevy::prelude::*;
 
 use crate::hotbar::{Hotbar, update_hotbar};
+use crate::hotbar_hud::{
+    spawn_hotbar_hud, update_hotbar_hud, HotbarHudState,
+};
 use crate::net::{
     handle_click_net, heartbeat, init_net_connection, process_inbox, send_queued_edits,
     ClientConnection, HeartbeatTimer, OutgoingEdits,
@@ -21,11 +24,13 @@ impl Plugin for WarrenGamePlugin {
             .init_resource::<OutgoingEdits>()
             .init_resource::<HeartbeatTimer>()
             .init_resource::<Hotbar>()
+            .init_resource::<HotbarHudState>()
             .add_systems(
                 Startup,
                 (
                     setup_environment,
                     setup_camera,
+                    spawn_hotbar_hud,
                     init_net_connection,
                 ),
             )
@@ -39,6 +44,7 @@ impl Plugin for WarrenGamePlugin {
                     process_inbox,
                     heartbeat,
                     sync_voxels_to_scene,
+                    update_hotbar_hud, // keep HUD in sync with selection
                 ),
             );
     }

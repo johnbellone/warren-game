@@ -6,9 +6,11 @@
 pub mod world;
 pub mod rendering;
 pub mod hotbar;
+pub mod hotbar_hud;
 pub mod net;
 pub mod app;
 
 pub use app::WarrenGamePlugin;
 pub use net::{ClientConnection, init_net_connection, heartbeat, process_inbox, send_queued_edits};
 pub use hotbar::{Hotbar, BlockPreset, update_hotbar};
+pub use hotbar_hud::{HotbarHudState, spawn_hotbar_hud, update_hotbar_hud};
