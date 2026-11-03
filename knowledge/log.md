@@ -1,3 +1,8 @@
+## 2026-11-03
+* **Update**: Linked `meshem-analysis.md` to `components-editor.md` (bevy_meshem is the rendering layer for the editor's voxel data model. The Mantine UI triggers voxel edits that feed into meshem's VoxelChange journal and update_mesh().).
+* **Update**: Linked `meshem-analysis.md` to `texture-loader-crates.md` (bevy_meshem generates mesh geometry from a voxel grid; texture-loader-crates handles the texture atlas and model data that meshem applies as vertex attributes. Together, they form the full voxel rendering pipeline.).
+* **Creation**: Documented concept `meshem-analysis.md` (bevy_meshem — Voxel Grid to Bevy Mesh Generation).
+
 ## 2026-11-02
 * **Update**: Linked `big-space-analysis.md` to `bevy-water-analysis.md` (Both address world-scale considerations: big_space handles coordinate precision for large worlds; bevy_water handles tileable rendering for large water surfaces. Complementary.).
 * **Update**: Linked `bevy-settings-example.md` to `bevy-plugin-example.md` (SettingsPlugin is a Plugin that manages persistent Resources via SettingsGroup. Shows the Plugin trait pattern with config via constructor args.).

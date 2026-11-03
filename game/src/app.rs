@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 
+use crate::hotbar::{Hotbar, update_hotbar};
 use crate::net::{
     handle_click_net, heartbeat, init_net_connection, process_inbox, send_queued_edits,
     ClientConnection, HeartbeatTimer, OutgoingEdits,
@@ -19,6 +20,7 @@ impl Plugin for WarrenGamePlugin {
             .init_resource::<ClientConnection>()
             .init_resource::<OutgoingEdits>()
             .init_resource::<HeartbeatTimer>()
+            .init_resource::<Hotbar>()
             .add_systems(
                 Startup,
                 (
@@ -30,8 +32,9 @@ impl Plugin for WarrenGamePlugin {
             .add_systems(
                 Update,
                 (
+                    update_hotbar,   // hotbar selection first
                     move_camera,
-                    handle_click_net,
+                    handle_click_net, // uses Hotbar for brush_color
                     send_queued_edits,
                     process_inbox,
                     heartbeat,

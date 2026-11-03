@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use bevy::prelude::*;
 
+use crate::hotbar::Hotbar;
 use crate::rendering::VoxelWorldResource;
 use warren_protocol::{ClientMsg, PeerInfo, ServerMsg, VoxelEdit};
 
@@ -292,10 +293,19 @@ pub fn send_queued_edits(conn: Res<ClientConnection>, mut outgoing: ResMut<Outgo
 }
 
 /// Handle local click → place/erase + queue for network.
+///
+/// Left-click: place
+///   - If a voxel is hit, place adjacent to the hit face
+///   - If no voxel is hit, place on the ground plane (y = 0)
+///
+/// Right-click: erase the hit voxel.
+///
+/// Uses the currently selected Hotbar preset for the placed block color.
 pub fn handle_click_net(
     camera: Single<(&Camera, &GlobalTransform)>,
     window: Single<&Window>,
     input: Res<ButtonInput<MouseButton>>,
+    hotbar: Res<Hotbar>,
     mut world_res: ResMut<VoxelWorldResource>,
     mut outgoing: ResMut<OutgoingEdits>,
 ) {
@@ -308,34 +318,219 @@ pub fn handle_click_net(
         return;
     }
 
-    if let Some(cursor) = window.cursor_position() {
-        if let Ok(ray) = camera.viewport_to_world(camera_tf, cursor) {
-            if let Some(point) = ray.plane_intersection_point(
-                Vec3::new(0.0, 0.5, 0.0),
-                InfinitePlane3d::new(Vec3::Y),
-            ) {
-                let x = point.x.round() as i32;
-                let z = point.z.round() as i32;
-                let pos = [x, 0, z];
-                let brush_color = world_res.brush_color;
-                if just_left {
-                    world_res.world.place(pos, brush_color);
+    let Some(cursor) = window.cursor_position() else {
+        return;
+    };
+
+    let Ok(ray) = camera.viewport_to_world(camera_tf, cursor) else {
+        return;
+    };
+
+    let brush_color = hotbar.current_color();
+
+    if just_left {
+        // Place: check voxel hit first, then ground plane
+        let origin = ray.origin;
+        let direction = ray.direction.as_vec3();
+        let hit = raycast_voxels(origin, direction, &world_res.world);
+        match hit {
+            VoxelHitResult::VoxelHit { position: pos, face_normal } => {
+                let new_pos = [
+                    pos[0] + face_normal[0],
+                    pos[1] + face_normal[1],
+                    pos[2] + face_normal[2],
+                ];
+                if world_res.world.in_bounds(new_pos) {
+                    world_res.world.place(new_pos, brush_color);
                     outgoing.queue.push(VoxelEdit {
-                        position: pos,
+                        position: new_pos,
                         color: brush_color,
                         erase: false,
                     });
+                    eprintln!(
+                        "[bevy] Placed {} at {new_pos:?} (adjacent to {pos:?})",
+                        hotbar.current_name()
+                    );
                 } else {
-                    world_res.world.erase(pos);
-                    outgoing.queue.push(VoxelEdit {
-                        position: pos,
-                        color: [0.0, 0.0, 0.0],
-                        erase: true,
-                    });
+                    eprintln!("[bevy] {new_pos:?} out of bounds, ignoring placement");
+                }
+            }
+            VoxelHitResult::None => {
+                // No voxel hit — place on the ground plane
+                if let Some(point) = ray.plane_intersection_point(
+                    Vec3::new(0.0, 0.5, 0.0),
+                    InfinitePlane3d::new(Vec3::Y),
+                ) {
+                    let x = point.x.round() as i32;
+                    let z = point.z.round() as i32;
+                    let pos = [x, 0, z];
+                    if world_res.world.in_bounds(pos) {
+                        world_res.world.place(pos, brush_color);
+                        outgoing.queue.push(VoxelEdit {
+                            position: pos,
+                            color: brush_color,
+                            erase: false,
+                        });
+                        eprintln!("[bevy] Placed {} at {pos:?} on ground", hotbar.current_name());
+                    }
                 }
             }
         }
+    } else {
+        // Right-click: erase the nearest hit voxel
+        let origin = ray.origin;
+        let direction = ray.direction.as_vec3();
+        if let VoxelHitResult::VoxelHit { position, .. } = raycast_voxels(origin, direction, &world_res.world) {
+            world_res.world.erase(position);
+            outgoing.queue.push(VoxelEdit {
+                position,
+                color: [0.0, 0.0, 0.0],
+                erase: true,
+            });
+            eprintln!("[bevy] Erased voxel at {position:?}");
+        }
     }
+}
+
+// --------------------------------------------------------------------------
+// Voxel Raycasting
+// --------------------------------------------------------------------------
+
+/// Result of a voxel raycast.
+pub enum VoxelHitResult {
+    /// Hit a voxel at `position` on the face with normal `face_normal` (in world coords, +/-1).
+    VoxelHit {
+        position: [i32; 3],
+        face_normal: [i32; 3],
+    },
+    /// No voxel was hit — caller should use the ground plane instead.
+    None,
+}
+
+impl VoxelHitResult {
+    pub fn position_and_face(&self) -> Option<([i32; 3], [i32; 3])> {
+        if let VoxelHitResult::VoxelHit { position, face_normal } = self {
+            Some((*position, *face_normal))
+        } else {
+            None
+        }
+    }
+}
+
+/// Cast a ray and find the nearest voxel it intersects.
+///
+/// `origin` and `direction` define a ray in world space.
+///
+/// AABB of voxel at `[x, y, z]` is `x±0.5 × [y, y+1] × z±0.5`
+/// (centered at `[x, y+0.5, z]` due to the Cuboid + Transform offset).
+///
+/// Returns the nearest hit voxel and which of its 6 faces was struck.
+pub fn raycast_voxels(origin: Vec3, direction: Vec3, world: &crate::world::VoxelWorld) -> VoxelHitResult {
+    let mut best_dist = f32::INFINITY;
+    let mut best: Option<([i32; 3], [i32; 3])> = None;
+
+    for pos in world.voxels.keys() {
+        let (hit_dist, face) = intersect_voxel_aabb(pos, origin, direction);
+        if let Some((d, f)) = hit_dist.zip(face) {
+            if d < best_dist {
+                best_dist = d;
+                best = Some((*pos, f));
+            }
+        }
+    }
+
+    match best {
+        Some((pos, face)) => VoxelHitResult::VoxelHit { position: pos, face_normal: face },
+        None => VoxelHitResult::None,
+    }
+}
+
+/// Intersect a ray with the AABB of a unit voxel at `pos`.
+///
+/// Returns `Some((distance, face_normal))` if the ray hits, `None` otherwise.
+///
+/// The AABB of a voxel at `[x, y, z]` is:
+///   min = [x-0.5, y, z-0.5]
+///   max = [x+0.5, y+1, z+0.5]
+///
+/// Uses the slab method. The hit face is the axis where the ray enters first.
+fn intersect_voxel_aabb(
+    pos: &[i32; 3],
+    origin: Vec3,
+    direction: Vec3,
+) -> (Option<f32>, Option<[i32; 3]>) {
+    // AABB bounds
+    let aabb_min = Vec3::new(
+        pos[0] as f32 - 0.5,
+        pos[1] as f32,        // y = bottom of the cube
+        pos[2] as f32 - 0.5,
+    );
+    let aabb_max = Vec3::new(
+        pos[0] as f32 + 0.5,
+        pos[1] as f32 + 1.0,  // y+1 = top of the cube
+        pos[2] as f32 + 0.5,
+    );
+
+    // Compute slab intersections for each axis
+    let mut t_near = -f32::INFINITY;
+    let mut t_far = f32::INFINITY;
+    let mut hit_face: Option<i32> = None; // 0=+x,1=-x,2=+y,3=-y,4=+z,5=-z
+
+    let axes = [
+        // (axis_index, origin_component, direction_component, min, max)
+        (0, origin.x, direction.x, aabb_min.x, aabb_max.x),
+        (1, origin.y, direction.y, aabb_min.y, aabb_max.y),
+        (2, origin.z, direction.z, aabb_min.z, aabb_max.z),
+    ];
+
+    for (axis_idx, o, d, min_val, max_val) in axes {
+        if d.abs() < 1e-7 {
+            // Ray is parallel to this axis and doesn't intersect
+            if o < min_val || o > max_val {
+                return (None, None);
+            }
+            continue;
+        }
+
+        let inv_d = 1.0 / d;
+        let mut t1 = (min_val - o) * inv_d;
+        let mut t2 = (max_val - o) * inv_d;
+        let mut face_for_this: i32 = axis_idx as i32;
+
+        // Normalize: t_near <= t_far, and face is the outward normal
+        if t1 > t2 {
+            let tmp = t1; t1 = t2; t2 = tmp;
+            face_for_this += 3; // flip to negative face of this axis
+        }
+
+        if t1 > t_near {
+            t_near = t1;
+            hit_face = Some(face_for_this);
+        }
+        if t2 < t_far {
+            t_far = t2;
+        }
+        if t_near > t_far {
+            return (None, None);
+        }
+    }
+
+    let t_hit = t_near.max(0.0); // ensure ray goes forward
+    if t_hit < 0.0 {
+        return (None, None);
+    }
+
+    let face_normal = match hit_face {
+        Some(0) => [1, 0, 0],   // +x face
+        Some(1) => [-1, 0, 0],  // -x face
+        Some(2) => [0, 1, 0],   // +y face
+        Some(3) => [0, -1, 0],  // -y face
+        Some(4) => [0, 0, 1],   // +z face
+        Some(5) => [0, 0, -1],  // -z face
+        _ => [0, 0, 0],
+    };
+
+    (Some(t_hit), Some(face_normal))
 }
 
 /// Sends a heartbeat every 30 seconds.
