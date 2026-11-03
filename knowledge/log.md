@@ -1,4 +1,5 @@
 ## 2026-11-03
+* **Update**: Updated concept `rendering/weft-renderscene.md` (Added verified Phase 2 per-chunk face-culling mesh decisions: Mesh::new(TriangleList).with_inserted_* builder, VertexFormat per attribute, Indices::U32, missing StandardMaterial vertex-color toggle so one mesh is used per distinct color, and dirty-chunk tracking pattern).
 * **Update**: Linked `rendering/weft-renderscene.md` to `components-game.md` (Concrete implementation of the playable character entity and environment rendering described by components-game).
 * **Update**: Linked `rendering/weft-renderscene.md` to `weft-analysis.md` (Corrects and extends the weft-analysis Bevy 0.20 translation table with actual verified API (base_color_texture, emissive LinearRgba, single-plane textured grid, auto-walk animation)).
 * **Creation**: Documented concept `rendering/weft-renderscene.md` (Warren-Game Bevy 0.20 Rendering & Animation Decisions).
