@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use std::collections::HashMap;
 
+use crate::character::CameraFollow;
 use crate::world::VoxelWorld;
 
 // --------------------------------------------------------------------------
@@ -149,7 +150,7 @@ pub fn handle_click(
 /// Simple WASD / Q E / R F camera movement on the ground plane.
 /// Bevy's built-in `TransformSystem` propagates Transform → GlobalTransform.
 pub fn move_camera(
-    mut cameras: Query<&mut Transform, With<Camera3d>>,
+    mut cameras: Query<&mut Transform, (With<Camera3d>, Without<CameraFollow>)>,
     input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
 ) {
