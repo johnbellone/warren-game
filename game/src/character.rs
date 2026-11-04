@@ -22,6 +22,7 @@ use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle, AnimationNode
 use bevy::animation::AnimationPlayer;
 use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
 
+use crate::neighborhood::SPAWN_POSITION;
 use crate::physics::character_body_components;
 
 const MODEL: &str = "models/maga_block.glb";
@@ -87,10 +88,12 @@ pub struct CharacterClips {
 
 /// Spawns a dedicated camera that follows the character (runs in Startup).
 pub fn spawn_follower_camera(mut commands: Commands) {
+    // Start 5 m behind, 2.5 m above the character's spawn point, facing it.
+    let cam = Vec3::new(SPAWN_POSITION[0], 2.5, SPAWN_POSITION[2] + 5.0);
+    let look = Vec3::new(SPAWN_POSITION[0], 1.0, SPAWN_POSITION[2]);
     commands.spawn((
         Camera3d::default(),
-        // Initial position: 5 m behind and 2.5 m above the character at origin
-        Transform::from_xyz(0.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform { translation: cam, ..Default::default() }.looking_at(look, Vec3::Y),
         CameraFollow,
     ));
 }
@@ -121,12 +124,14 @@ pub fn spawn_character(
     clips_res.graph = graph_handle.clone();
     clips_res.nodes = nodes;
 
-    // Start 3 m up so the dynamic body falls onto the voxel-top floor and
-    // settles — the character has real physics, not a static transform.
+    // Start 3 m up on the open plaza in front of the Capitol so the dynamic
+    // body falls onto the voxel-top floor and settles — the character has real
+    // physics, not a static transform. SPAWN_POSITION is outside the building
+    // footprint so the grid controller never jams the character in place.
     commands
         .spawn((
             Character,
-            Transform::from_xyz(0.0, 3.0, 0.0),
+            Transform::from_xyz(SPAWN_POSITION[0], SPAWN_POSITION[1], SPAWN_POSITION[2]),
             character_body_components(),
             WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(MODEL))),
         ))

@@ -27,6 +27,7 @@ tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 futures = { workspace = true }
 avian3d = "0.8"
+bevy_voxel_world = "0.18"
 
 [dev-dependencies]
 tokio = { workspace = true }

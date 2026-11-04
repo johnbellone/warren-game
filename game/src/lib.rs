@@ -7,6 +7,9 @@ pub mod mesh;
 pub mod neighborhood;
 pub mod rendering;
 pub mod physics;
+pub mod collision;
+pub mod path_trace;
+pub mod editor;
 pub mod hotbar;
 pub mod hotbar_hud;
 pub mod character;
@@ -38,3 +41,12 @@ pub use physics::{
 };
 
 pub use neighborhood::{GROUND_DEPTH, GROUND_HALF, SCALE};
+
+// Path-tracing preview pass (CPU ray-march + PPM dump).
+pub use path_trace::{PathCamera, PathTraceResource, render_path_trace, start_path_trace, trace_frame, dump_ppm};
+
+// Voxel-grid collision resolver (swept AABB vs VoxelWorld).
+pub use collision::{integrate_against_grid, aabb_touches_solid};
+
+// In-game editor controls (keyboard-driven edits to the VoxelWorld + Hotbar).
+pub use editor::editor_edit;

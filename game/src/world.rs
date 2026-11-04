@@ -95,6 +95,13 @@ pub struct VoxelWorld {
     /// dirties its own chunk plus the up to 6 face-neighbour chunks, because a
     /// face on a chunk seam belongs to both chunks.
     dirty: HashSet<ChunkPos>,
+    /// A monotonic version number bumped on every voxel mutation (`place`/
+    /// `erase`). Callers with an expensive cached snapshot of the world (e.g.
+    /// the off-thread path tracer) compare their last-traced revision against
+    /// this to re-trace only when the world actually changed, instead of
+    /// re-cloning the whole world on a fixed cadence. Not part of the Clone
+    /// derive's equality (it's Copy via `#[derive(Clone)]`).
+    revision: u64,
 }
 
 impl VoxelWorld {
@@ -104,6 +111,7 @@ impl VoxelWorld {
             chunks: HashMap::new(),
             bounds,
             dirty: HashSet::new(),
+            revision: 0,
         }
     }
 
@@ -112,9 +120,36 @@ impl VoxelWorld {
         self.bounds
     }
 
+    /// The current monotonic world revision. Bumped on every `place`/`erase`
+    /// so snapshot-based caches can re-sync only when the world actually
+    /// changed. Cheap: a single 64-bit read.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     /// Number of occupied chunks.
     pub fn chunk_count(&self) -> usize {
         self.chunks.len()
+    }
+
+    /// The tight axis-aligned box `[lo, hi]` (in voxel-int coordinates) that
+    /// contains every occupied chunk, or `None` when the world is empty. This
+    /// lets callers (e.g. the path tracer) reject rays leaving the scene in
+    /// O(1) rather than marching a fixed large number of empty steps through
+    /// the air. A chunk `c` occupies the slab `[c*CHUNK, c*CHUNK + CHUNK - 1]`.
+    pub fn occupied_extent(&self) -> Option<([i32; 3], [i32; 3])> {
+        let mut lo = [i32::MAX; 3];
+        let mut hi = [i32::MIN; 3];
+        let mut any = false;
+        for cp in self.chunks.keys() {
+            any = true;
+            for a in 0..3 {
+                let base = cp.0[a] * CHUNK;
+                lo[a] = lo[a].min(base);
+                hi[a] = hi[a].max(base + CHUNK - 1);
+            }
+        }
+        if any { Some((lo, hi)) } else { None }
     }
 
     // --- coordinate math -------------------------------------------------
@@ -177,6 +212,7 @@ impl VoxelWorld {
         let chunk = self.chunks.entry(c).or_default();
         chunk.set(l[0], l[1], l[2], LocalVoxel { color, asset_type: AssetType::Voxel });
         self.mark_dirty(position);
+        self.revision += 1;
     }
 
     /// Erase the voxel at `position`, dropping the chunk if it becomes empty.
@@ -190,6 +226,7 @@ impl VoxelWorld {
             }
         }
         self.mark_dirty(position);
+        self.revision += 1;
     }
 
     /// Apply a VoxelEdit delta (either place or erase).
@@ -418,6 +455,25 @@ mod tests {
         world.place([3, 0, 5], [1.0, 0.5, 0.0]);
         assert!(world.contains([3, 0, 5]));
         assert!(!world.contains([99, 0, 99]));
+    }
+
+    #[test]
+    fn revision_bumps_on_each_mutation_and_is_stable_when_idle() {
+        let mut world: VoxelWorld = VoxelWorld::default();
+        assert_eq!(world.revision(), 0, "fresh world starts at revision 0");
+        world.place([0, 0, 0], [1.0, 0.0, 0.0]);
+        let after_place = world.revision();
+        assert_eq!(after_place, 1, "place bumps the revision exactly once");
+        world.place([1, 0, 0], [0.0, 1.0, 0.0]);
+        assert_eq!(world.revision(), after_place + 1);
+        // Idle queries must NOT advance the revision (the path-trace dirty gate
+        // relies on this: a static world keeps its revision between frames).
+        world.contains([0, 0, 0]);
+        world.get([0, 0, 0]);
+        world.occupied_extent();
+        assert_eq!(world.revision(), after_place + 1, "queries don't bump the revision");
+        world.erase([1, 0, 0]);
+        assert_eq!(world.revision(), after_place + 2, "erase bumps the revision");
     }
 
     #[test]

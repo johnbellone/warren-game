@@ -45,6 +45,15 @@ pub const GROUND_DEPTH: i32 = 10;
 /// wide enough to cover the scaled Capitol footprint (~±54 at SCALE=3).
 pub const GROUND_HALF: i32 = 64;
 
+/// Where the character (and the follow camera) start: on the open plaza in
+/// front of the Capitol, well clear of every building element so the grid
+/// controller never finds solid voxels on a side and jams the character in
+/// place. The Capitol's solid footprint at character height is roughly
+/// `|x| ≤ 54` or `|z| ≤ 33` (podium ±48/±33 plus wings out to ±54); `z = 50`
+/// sits outside the N/S wing (`z ≤ 33`) and the central mass, so the character
+/// falls straight onto the ground and can walk toward the building.
+pub const SPAWN_POSITION: [f32; 3] = [0.0, 3.0, 50.0];
+
 /// Startup system: populate the world with the stylized U.S. Capitol
 /// neighborhood. Runs once on app start (before rendering begins).
 pub fn load_capitol_neighborhood(mut world_res: ResMut<VoxelWorldResource>) {
@@ -267,5 +276,46 @@ mod tests {
         populate_capitol_neighborhood(&mut big);
         assert!(big.voxel_count() >= 9_699 * 20,
             "3x resolution should grow the voxel count well past the 1x ~9,699 baseline");
+    }
+
+    #[test]
+    fn spawn_position_is_on_open_plaza() {
+        // The character used to spawn at the world origin (0,3,0), which is
+        // inside the Capitol podium — solid voxels on every side jammed the
+        // grid controller so WASD could not move the character. The fix is to
+        // start on open ground outside the footprint.
+        let mut world = make_world();
+        populate_capitol_neighborhood(&mut world);
+
+        // The old (wrong) origin-spawn is solid building geometry: the podium
+        // (y 0..=6) fills the center at SCALE=3, so the origin column is solid.
+        assert!(
+            world.contains([0, 3, 0]),
+            "the origin column should be inside the Capitol podium (the old, wrong spawn point)"
+        );
+
+        // At the SPAWN_POSITION column the entire fall + standing range must be
+        // free of building voxels, or the grid controller would block movement.
+        let sx = SPAWN_POSITION[0] as i32;
+        let sz = SPAWN_POSITION[2] as i32;
+        let mut blocked_at: Option<i32> = None;
+        for y in 0..=48_i32 {
+            if world.contains([sx, y, sz]) {
+                blocked_at = Some(y);
+                break;
+            }
+        }
+        assert!(
+            blocked_at.is_none(),
+            "SPAWN_POSITION {SPAWN_POSITION:?} is inside building geometry at y={:?} — clear a plaza spot",
+            blocked_at
+        );
+
+        // It must actually sit on the ground (the top plaza layer, y = -1), so
+        // the character has somewhere to stand rather than free-fall forever.
+        assert!(
+            world.contains([sx, -1, sz]),
+            "SPAWN_POSITION {SPAWN_POSITION:?} must rest on the plaza (ground at y=-1)"
+        );
     }
 }
