@@ -19,8 +19,14 @@ use crate::editor::editor_edit;
 use crate::rendering::{setup_environment, sync_chunk_meshes, VoxelWorldResource};
 
 /// Per-frame voxel-grid collision: after Avian's XPBD solve, sweep the
-/// character's bounding box against the voxel grid and correct the body so it
-/// rests on top of voxels and cannot pass through walls (the grid controller).
+/// character's bounding box against the voxel grid to keep per-voxel
+/// collision. **Currently disabled in the schedule**: with Avian already
+/// resting the dynamic body on its static floor slab, this controller's
+/// snapped sign pushes the body back DOWN into the ground, so the two layers
+/// fight and the character falls through the floor. Avian's slab now owns the
+/// floor collision; this controller (+ its unit-tested `integrate_against_grid`)
+/// is kept for a future, sign-correct per-voxel pass.
+#[allow(dead_code)]
 fn update_voxel_collision(
     time: Res<Time>,
     world_res: Res<VoxelWorldResource>,
@@ -79,7 +85,10 @@ impl Plugin for WarrenGamePlugin {
                 Update,
                 (
                     apply_character_input,
-                    update_voxel_collision,
+                    // update_voxel_collision is intentionally NOT in the schedule:
+                    // its snapped sign clobbers Avian's correct floor rest and drops
+                    // the character into the ground. Avian's static slab owns the
+                    // floor. (See the `#[allow(dead_code)] fn above.)
                     camera_orbit,
                     sync_character_state,
                     camera_follow_character,
