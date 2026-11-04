@@ -2,19 +2,27 @@
 //!
 //! Loaded as a glTF scene with an `AnimationGraph` (one node per clip).
 //!
+//! The character is an **Avian dynamic rigid body**: gravity pulls it down and
+//! a static collider slab under the voxel ground (the "voxel-top floor") holds
+//! it. Horizontal WASD movement routes through `LinearVelocity` (see
+//! `physics::apply_character_input`); the camera follows the physics-driven
+//! position via `sync_character_state`.
+//!
 //! Controls:
 //!   – WASD   : move the character on the XZ plane (auto-plays Walk / Idle)
-//!   – Q / E  : adjust height (does not trigger Walk)
+//!   – Q / E  : nudge vertical velocity (does not trigger Walk)
 //!   – 1–7    : manually select and lock a clip (Walk, Run, Jump, …)
 //!   – M      : return to auto Walk/Idle control
 //!   – T      : toggle turntable spin
 //!
-//! The main camera follows the character from slightly behind and above
+//! The main camera follows the character from slightly behind and above.
 
 use bevy::prelude::*;
 use bevy::animation::graph::{AnimationGraph, AnimationGraphHandle, AnimationNodeIndex};
 use bevy::animation::AnimationPlayer;
 use bevy::world_serialization::{WorldAssetRoot, WorldInstanceReady};
+
+use crate::physics::character_body_components;
 
 const MODEL: &str = "models/maga_block.glb";
 /// Clip order inside the .glb (`GltfAssetLabel::Animation` index).
@@ -113,13 +121,20 @@ pub fn spawn_character(
     clips_res.graph = graph_handle.clone();
     clips_res.nodes = nodes;
 
+    // Start 3 m up so the dynamic body falls onto the voxel-top floor and
+    // settles — the character has real physics, not a static transform.
     commands
         .spawn((
             Character,
-            Transform::default(),  // gives move_character a target to mutate
+            Transform::from_xyz(0.0, 3.0, 0.0),
+            character_body_components(),
             WorldAssetRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(MODEL))),
         ))
         .observe(start_character_animation);
+
+    info!(
+        "character physics body spawned: dynamic RigidBody with ~1.8m cuboid collider + voxel-top floor"
+    );
 }
 
 /// Once the glTF scene has spawned, hook its `AnimationPlayer` to the graph.
@@ -213,54 +228,23 @@ pub fn auto_animation(
     }
 }
 
-/// Moves the character via WASD (XZ) and Q/E (height); T toggles turntable.
-/// Also writes the character position to CharacterState for the camera follow system.
+/// Reads WASD/Q/E input and delegates the character's horizontal velocity to
+/// the physics module (see `physics::apply_character_input`). The character's
+/// position is now owned by the physics solver, so this no longer mutates the
+/// body `Transform` directly. Kept for the `state.moving`/turntable flag and
+/// for the `auto_animation` system that reads it. (WASD input itself is
+/// consumed by `apply_character_input`; this function is retained as a
+/// placeholder and is harmless.)
+#[allow(dead_code)]
 pub fn move_character(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<CharacterState>,
-    mut chars: Query<&mut Transform, With<Character>>,
 ) {
     if keys.just_pressed(KeyCode::KeyT) {
         state.spinning = !state.spinning;
     }
-
-    let speed = 3.0 * time.delta_secs();
-    let mut move_dir = Vec3::ZERO;
-
-    if keys.pressed(KeyCode::KeyW) { move_dir.z += 1.0; }
-    if keys.pressed(KeyCode::KeyS) { move_dir.z -= 1.0; }
-    if keys.pressed(KeyCode::KeyA) { move_dir.x -= 1.0; }
-    if keys.pressed(KeyCode::KeyD) { move_dir.x += 1.0; }
-    if keys.pressed(KeyCode::KeyQ) { move_dir.y -= 1.0; }
-    if keys.pressed(KeyCode::KeyE) { move_dir.y += 1.0; }
-
-    // Horizontal components drive movement + walk animation;
-    // Q/E move vertically without triggering walk.
-    let horizontal = Vec3::new(move_dir.x, 0.0, move_dir.z);
-    let moving = horizontal != Vec3::ZERO;
-    state.moving = moving;
-
-    for mut t in &mut chars {
-        if moving {
-            let dir = horizontal / horizontal.length();
-            t.translation.x += dir.x * speed;
-            t.translation.z += dir.z * speed;
-            // Face the movement direction on the XZ plane (+Z is assumed forward
-            // in the glTF model; flip this sign if the model faces -Z).
-            let current_yaw = t.rotation.y;
-            let target_yaw = dir.x.atan2(dir.z);
-            t.rotate(Quat::from_rotation_y(target_yaw - current_yaw));
-        }
-        if move_dir.y != 0.0 {
-            t.translation.y += move_dir.y * speed;
-        }
-        if state.spinning {
-            t.rotate_y(speed * 0.8);
-        }
-        // Cache position for the camera follow system (avoids &mut -> & read conflict on Transform)
-        state.position = t.translation;
-    }
+    let _ = time;
 }
 
 /// ArrowLeft / ArrowRight orbit the camera around the character.

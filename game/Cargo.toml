@@ -26,6 +26,7 @@ warren-protocol = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 futures = { workspace = true }
+avian3d = "0.8"
 
 [dev-dependencies]
 tokio = { workspace = true }

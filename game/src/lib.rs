@@ -6,6 +6,7 @@ pub mod world;
 pub mod mesh;
 pub mod neighborhood;
 pub mod rendering;
+pub mod physics;
 pub mod hotbar;
 pub mod hotbar_hud;
 pub mod character;
@@ -15,7 +16,7 @@ pub mod app;
 pub use app::WarrenGamePlugin;
 
 pub use rendering::{
-    setup_environment, sync_chunk_meshes, VoxelWorldResource,
+    setup_environment, sync_chunk_meshes, VoxelWorldResource, Sky,
 };
 
 pub use net::{
@@ -31,3 +32,9 @@ pub use character::{
     spawn_follower_camera, switch_animation, CameraFollow, Character, CharacterClips,
     CharacterState, CameraOrbitState,
 };
+
+pub use physics::{
+    apply_character_input, sync_character_state, setup_physics, character_body_components,
+};
+
+pub use neighborhood::{GROUND_DEPTH, GROUND_HALF, SCALE};

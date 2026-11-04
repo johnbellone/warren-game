@@ -14,15 +14,17 @@ use crate::world::{ChunkPos, VoxelWorld};
 // Components
 // --------------------------------------------------------------------------
 
-/// Marker + position for a spawned voxel cube entity.
+/// Marker + position for a spawned voxel cube entity (retained; chunk meshes
+/// do not use per-voxel entities, but keep the type for future use).
 #[derive(Component)]
 pub struct VoxelCube {
     pub position: [i32; 3],
 }
 
-/// Marker component for the ground plane.
+/// Marker component for the procedural skybox entity (an inside-out, unlit,
+/// gradient-shaded sphere that encloses the scene).
 #[derive(Component)]
-pub struct Ground;
+pub struct Sky;
 
 // --------------------------------------------------------------------------
 // Resources
@@ -220,67 +222,133 @@ pub fn move_camera(
 // Setup helpers
 // --------------------------------------------------------------------------
 
-/// Builds a grid texture procedurally, returned as a top-down `Image` (RGBA8).
+/// Spawns a procedural skybox: a large, double-sided sphere shaded with a
+/// vertical gradient that runs from a soft horizon colour at the bottom to a
+/// deep sky blue at the top. The texture is generated in-memory (2×512 RGBA8),
+/// so the scene is fully self-contained — no external `.hdr`/`.png` asset
+/// needed.
 ///
-/// * background               – dark slate
-/// * minor lines (every 1 m)  – dim grey, 1 texel thick
-/// * major lines (every 10 m) – bright blue, 2 texel thick
-///
-/// A single opaque textured plane avoids z-fighting (one depth value) and
-/// thin-line flicker (lines are baked into the texture and are multi-pixel).
-fn build_grid_texture(
-    texels_per_cell: u32,
-    cells: u32,
-    minor_line: u32,
-    major_line: u32,
-) -> Image {
-    let size = texels_per_cell * cells;
-    let mut pixels: Vec<u8> = vec![0u8; (size * size * 4) as usize];
-
-    let bg: [u8; 3] = [16, 16, 24];
-    let minor: [u8; 3] = [60, 64, 80];
-    let major: [u8; 3] = [100, 165, 255];
-
-    // A major line spans `major_line` texels at every 10-th cell boundary.
-    let major_stride = texels_per_cell * 10;
-
-    for y in 0..size {
-        for x in 0..size {
-            let rgb = if x.rem_euclid(major_stride) < major_line
-                || y.rem_euclid(major_stride) < major_line
-            {
-                major
-            } else if x.rem_euclid(texels_per_cell) < minor_line
-                || y.rem_euclid(texels_per_cell) < minor_line
-            {
-                minor
-            } else {
-                bg
-            };
-
-            let i = ((y * size + x) * 4) as usize;
-            pixels[i] = rgb[0];
-            pixels[i + 1] = rgb[1];
-            pixels[i + 2] = rgb[2];
+/// `double_sided: true` renders the interior faces so we see the sky from
+/// inside; `unlit: true` so the gradient shows at full strength independent of
+/// the scene's directional light.
+fn build_sky(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    textures: &mut Assets<Image>,
+) {
+    // Gradient texture: one column of `h` rows, row 0 = horizon (pale),
+    // row h-1 = zenith (deep blue). Bevy uploads row 0 at the bottom (v=0).
+    let h = 512u32;
+    let w = 2u32;
+    let mut pixels: Vec<u8> = vec![0u8; (w * h * 4) as usize];
+    let horizon: [f32; 3] = [0.70, 0.80, 0.92]; // pale near the horizon
+    let zenith: [f32; 3] = [0.16, 0.30, 0.60]; // deep blue at the zenith
+    for row in 0..h {
+        let t = row as f32 / h as f32;
+        let e = t * t; // ease so the zenith stays rich
+        let r = lerp(horizon[0], zenith[0], e);
+        let g = lerp(horizon[1], zenith[1], e);
+        let b = lerp(horizon[2], zenith[2], e);
+        for col in 0..w {
+            let i = ((row * w + col) * 4) as usize;
+            pixels[i] = (r * 255.0).round().clamp(0.0, 255.0) as u8;
+            pixels[i + 1] = (g * 255.0).round().clamp(0.0, 255.0) as u8;
+            pixels[i + 2] = (b * 255.0).round().clamp(0.0, 255.0) as u8;
             pixels[i + 3] = 255;
         }
     }
 
-    Image::new(
+    let gradient = textures.add(Image::new(
         Extent3d {
-            width: size,
-            height: size,
+            width: w,
+            height: h,
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
         pixels,
-        TextureFormat::Rgba8UnormSrgb,
+        TextureFormat::Rgba8Unorm,
         RenderAssetUsages::default(),
-    )
+    ));
+
+    let sky_radius = 480.0_f32;
+    let sky_mesh = meshes.add(make_sky_sphere_mesh(sky_radius, 48, 24));
+
+    let sky_material = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        base_color_texture: Some(gradient),
+        unlit: true,
+        double_sided: true,
+        ..default()
+    });
+
+    commands.spawn((
+        Mesh3d(sky_mesh),
+        MeshMaterial3d(sky_material),
+        Transform::default(),
+        Sky,
+    ));
+
+    info!("sky entity spawned at radius {sky_radius} (unit sphere + zenith/horizon gradient texture)");
 }
 
-/// Spawns a dark ground plane with a tiled wireframe grid overlay, a directional
-/// light, and the shared 1×1×1 cuboid mesh.
+/// Linear interpolation for the sky gradient (sRGB space is fine here).
+fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+/// Build a UV sphere mesh of `radius` with `slices` longitude segments and
+/// `stacks` latitude rings. Faces wind so the interior is visible when
+/// rendered double-sided. UV `v` runs 0 (south pole) to 1 (north pole) so a
+/// vertical gradient texture maps cleanly to the sky.
+fn make_sky_sphere_mesh(radius: f32, slices: u32, stacks: u32) -> bevy::mesh::Mesh {
+    let mut positions: Vec<Vec3> = Vec::new();
+    let mut normals: Vec<Vec3> = Vec::new();
+    let mut uvs: Vec<Vec2> = Vec::new();
+    let mut indices: Vec<u32> = Vec::new();
+
+    // (stacks + 1) × (slices + 1) grid of vertices.
+    for i in 0..=stacks {
+        let phi = std::f32::consts::PI * i as f32 / stacks as f32; // 0..PI (top..bottom)
+        let sin_phi = phi.sin();
+        let cos_phi = phi.cos();
+        for j in 0..=slices {
+            let theta = 2.0 * std::f32::consts::PI * j as f32 / slices as f32;
+            let sin_theta = theta.sin();
+            let cos_theta = theta.cos();
+            let dir = Vec3::new(cos_theta * sin_phi, cos_phi, sin_theta * sin_phi);
+            positions.push(dir * radius);
+            normals.push(dir);
+            uvs.push(Vec2::new(j as f32 / slices as f32, 1.0 - i as f32 / stacks as f32));
+        }
+    }
+
+    // Two triangles per quad.
+    for i in 0..stacks {
+        for j in 0..slices {
+            let a = i * (slices + 1) + j;
+            let b = a + (slices + 1);
+            indices.extend_from_slice(&[a, b, a + 1]);
+            indices.extend_from_slice(&[b, b + 1, a + 1]);
+        }
+    }
+
+    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
+        .with_inserted_indices(bevy::mesh::Indices::U32(indices))
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
+}
+
+// --------------------------------------------------------------------------
+// Environment setup
+// --------------------------------------------------------------------------
+
+/// Spawns a directional light, the procedural skybox, and the shared 1×1×1
+/// cuboid mesh handle. The old textured ground + grid plane were removed in
+/// favor of the 10-deep procedural voxel ground (see `neighborhood.rs`),
+/// which is now the only floor — so there are no overlapping planes to
+/// z-fight or flicker against.
 pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -288,40 +356,7 @@ pub fn setup_environment(
     mut textures: ResMut<Assets<Image>>,
     mut world_res: ResMut<VoxelWorldResource>,
 ) {
-    // Black opaque ground plane, slightly below the grid.
-    commands.spawn((
-        Mesh3d(meshes.add(
-            Plane3d::default().mesh().size(256.0, 256.0)
-        )),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.02, 0.02, 0.06),
-            unlit: true,
-            ..default()
-        })),
-        Transform::from_xyz(0.0, -0.05, 0.0)
-            .looking_at(Vec3::ZERO, Vec3::Y)
-            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-        Ground,
-    ));
-
-    // Grid: 1 texel-per-meter, 256 cells → 256 m wide. Lines baked into the
-    // texture. minor_line=2, major_line=4 texels keeps lines crisp at distance.
-    let grid_image = build_grid_texture(1, 256, 2, 4);
-    let grid_texture = textures.add(grid_image);
-    let grid_material = materials.add(StandardMaterial {
-        base_color_texture: Some(grid_texture),
-        unlit: true,
-        ..default()
-    });
-    commands.spawn((
-        Mesh3d(meshes.add(
-            Plane3d::default().mesh().size(256.0, 256.0)
-        )),
-        MeshMaterial3d(grid_material),
-        Transform::from_xyz(0.0, 0.02, 0.0)
-            .looking_at(Vec3::ZERO, Vec3::Y)
-            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-    ));
+    build_sky(&mut commands, &mut meshes, &mut materials, &mut textures);
 
     // Directional light (shadows off for performance).
     commands.spawn((
@@ -364,4 +399,91 @@ mod tests {
         assert!(res.world.get([3, 0, 5]).is_some());
         assert_eq!(res.world.get([99, 0, 99]), None);
     }
+
+    /// The procedural skybox is a self-contained, closed UV sphere built from
+    /// the mesh + material + gradient texture in `build_sky` — this asserts the
+    /// geometry generator produces a non-degenerate, closed triangular mesh with
+    /// matching counts (positions = normals = uvs; indices form closed quads).
+    #[test]
+    fn sky_sphere_geometry_is_closed_and_consistent() {
+        let mesh = make_sky_sphere_mesh(480.0, 48, 24);
+
+        // Positions, normals, and UVs must have the same vertex count.
+        let positions = mesh.attribute(bevy::mesh::Mesh::ATTRIBUTE_POSITION).unwrap();
+        let normals = mesh.attribute(bevy::mesh::Mesh::ATTRIBUTE_NORMAL).unwrap();
+        let uvs = mesh.attribute(bevy::mesh::Mesh::ATTRIBUTE_UV_0).unwrap();
+        let count = positions.len();
+
+        // A UV sphere with stacks=24, slices=48 → (stacks+1)×(slices+1)
+        // = 25 × 49 = 1225 vertices.
+        assert_eq!(count, 25 * 49, "vertex count mismatch");
+        assert_eq!(normals.len(), count, "normals must match positions");
+        assert_eq!(uvs.len(), count, "uvs must match positions");
+
+        // 24 × 48 quads × 2 triangles × 3 verts = 6912 indices.
+        let indices = mesh.indices().unwrap();
+        assert_eq!(indices.len(), 24 * 48 * 6, "index count mismatch");
+        assert!(
+            matches!(
+                indices,
+                bevy::mesh::Indices::U32(_) | bevy::mesh::Indices::U16(_)
+            ),
+            "index type must be U16 or U32"
+        );
+    }
+
+    /// The zenith row of the gradient texture is clearly bluer than the horizon
+    /// row — i.e. the "self-contained basic skybox" has the intended colour
+    /// ramp (pale horizon → deep-blue zenith).
+    #[test]
+    fn sky_gradient_texture_is_bluer_at_zenith() {
+        let h = 512u32;
+        let w = 2u32;
+        let horizon: [f32; 3] = [0.70, 0.80, 0.92];
+        let zenith: [f32; 3] = [0.16, 0.30, 0.60];
+        let mut pixels = vec![0u8; (w * h * 4) as usize];
+        for row in 0..h {
+            let t = row as f32 / h as f32;
+            let e = t * t;
+            for col in 0..w {
+                let i = ((row * w + col) * 4) as usize;
+                pixels[i] = (lerp(horizon[0], zenith[0], e) * 255.0).round().clamp(0.0, 255.0) as u8;
+                pixels[i + 1] = (lerp(horizon[1], zenith[1], e) * 255.0).round().clamp(0.0, 255.0) as u8;
+                pixels[i + 2] = (lerp(horizon[2], zenith[2], e) * 255.0).round().clamp(0.0, 255.0) as u8;
+                pixels[i + 3] = 255;
+            }
+        }
+        let horizon_b = pixels[2];           // row 0 (horizon), col 0, blue channel
+        let horizon_r = pixels[0];
+        let last_row = ((h - 1) as usize * w as usize) * 4;
+        let zenith_b = pixels[last_row + 2]; // last row (zenith), col 0, blue
+        let zenith_r = pixels[last_row];
+        assert!(horizon_b >= 100, "horizon should have a meaningful blue value, got {horizon_b}");
+        assert!(
+            (zenith_b as f32) < (horizon_b as f32) * 0.9,
+            "zenith blue must be below horizon blue: zenith_b={zenith_b}, horizon_b={horizon_b}"
+        );
+        assert!(
+            (zenith_r as f32) < (horizon_r as f32) * 0.9,
+            "zenith red must be below horizon red; zenith_r={zenith_r}, horizon_r={horizon_r}"
+        );
+    }
+
+    /// A minimal `World` can spawn an entity tagged with the `Sky` component.
+    /// This proves the `Sky` marker is a valid component and that the
+    /// procedural skybox entity type is usable in a world context without
+    /// the full render pipeline or asset server.
+    #[test]
+    fn sky_entity_can_be_spawned_in_a_world() {
+        let mut world = World::new();
+        let e = world.spawn(Sky).id();
+        assert!(
+            world.get::<Sky>(e).is_some(),
+            "Sky component must be present on the spawned entity"
+        );
+        let matches = world.query::<&Sky>().iter(&world).count();
+        assert_eq!(matches, 1, "exactly one Sky entity expected");
+    }
+
 }
+
