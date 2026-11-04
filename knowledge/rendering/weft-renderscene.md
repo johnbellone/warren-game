@@ -1,7 +1,7 @@
 ---
 type: Architecture
 title: "Warren-Game Bevy 0.20 Rendering & Animation Decisions"
-description: "Verified grid-blink fix (single textured plane), Bevy 0.20 material/texture API corrections, asset path resolution, and character auto-walk animation design for warren-game."
+description: "Verified Bevy 0.20 rendering, physics (avian3d 0.8), 10-deep procedural voxel ground, 3x resolution, and procedural skybox decisions for warren-game."
 tags: [bevy, grid, texture, animation, character, decisions, cargo]
 generated: { by: agent/cli, at: "2026-11-03T20:00:00Z" }
 status: stable
@@ -85,6 +85,35 @@ warren-game (Bevy 0.20) grid rendering and character walk-animation designs, ver
   `has_chunk`/`get_chunk`. `place`/`erase` call `mark_dirty`. `sync_chunk_meshes` drains
   `take_dirty()`, despawns each dirty chunk's old mesh entities, and rebuilds from
   `collect_chunk_faces`, recording entities per chunk in `spawned_chunks: HashMap<ChunkPos,Vec<Entity>>`.
+
+## Avian3D Physics + Procedural Ground + Sky (Phase 3, verified by compile + 37 tests + runtime smoke)
+
+### avian3d 0.8 integration (verified)
+- `avian3d = "0.8"` compiles cleanly against Bevy 0.20 on macOS ARM64; adds transitive Parry3d native deps (no pure-Rust fallback needed).
+- `PhysicsPlugins::default()` must be added to `WarrenGamePlugin::build` BEFORE calling `app.init_resource::<PhysicsIslands>()` — the physics island resource isn't initialised by `DefaultPlugins`, so ordering matters.
+- **Test app pitfall** (verified by a failing test): `app.add_plugins((MinimalPlugins, TransformPlugin, PhysicsPlugins::default()))` is NOT sufficient for `character_falls_under_gravity_and_rests_on_floor` — the `ColliderCachePlugin::update_collider_cache_from_asset_events` system reads `MessageReader<AssetEvent<Mesh>>`, which requires `Mesh` to be registered as an asset type. `bevy::mesh::MeshPlugin` must be added to the test app's plugin set alongside `PhysicsPlugins` + `AssetPlugin` — otherwise `app.update()` panics with "Message not initialized: asset_events". This is not a bug in the main app (which uses `DefaultPlugins` that includes `MeshPlugin`), only an oversight when building a minimal test app.
+- `Gravity` resource default is `Vec3::ZERO`; must be explicitly set in `setup_physics` via `*gravity = Gravity(Vec3::new(0.0, -9.8, 0.0))` — the `init` does not override it when a default value is the zero vector.
+- `Collider::cuboid(x, y, z)` takes the FULL x/y/z dimensions (not half-extents); internally calls `Cuboid::new(x * 0.5, y * 0.5, z * 0.5)`. The character collider is `Collider::cuboid(0.9, 1.8, 0.9)` = ~1.8 m tall.
+- `CharacterState.position` is updated by `sync_character_state` (a system that runs AFTER `PhysicsStepSystems::Finalize`), so `camera_follow_character` reads `state.position` (not a direct `Transform` read), avoiding a `&`/`&mut` static conflict on the dynamic body's own `Transform`.
+
+### 10-deep procedural voxel ground (verified)
+- `build_ground(half=GROUNd_HALF, depth=GROUND_DEPTH=10)` in `neighborhood.rs` fills a solid slab from `y=-depth` to `y=-1`, `[-half..=half]` in x/z. No `Plane3d`, no `build_grid_texture`, no glow plane — entirely replaced by voxel cubes meshed per-chunk via `collect_chunk_faces`.
+- No z-fighting or sub-pixel flicker possible: the ground is 10 stacked `Cuboid`-derived `TriangleList` meshes, not overlapping thin quads. The `sync_chunk_meshes` dirty-chunk pattern re-draws only changed chunks.
+- `GROUND_HALF` (plaza half-extent) was raised to `64` (from `32`) so the static Avian collider slab in `setup_physics` (`Collider::cuboid(GROUND_COLLIDER_HALF*2, GROUND_DEPTH, GROUND_COLLIDER_HALF*2)` at `y = -GROUND_DEPTH/2`) covers the full voxel ground. The top face of the collider sits at `y=0` so the character rests ON the voxel ground's top surface, not through it.
+
+### 3× voxel resolution (verified)
+- `SCALE = 3` in `neighborhood.rs`; every voxel coordinate is multiplied by `SCALE`, and heights/radii are `* SCALE / SCALE`-normalised. This shrinks voxel size to ~1/3 m (from 1 m at SCALE=1), giving ~27× more voxels per unit cube — 381,129 voxels in 49 chunks for the Capitol + ground, up from ~9,699 at SCALE=1.
+- `resolution_scale_is_three()` unit test asserts `SCALE == 3`.
+
+### Procedural sky sphere (verified)
+- `Sky` marker component + `build_sky()` in `rendering.rs`. No `Sphere` primitive exists in `bevy_scene` at 0.20; the sphere geometry is built by hand with `make_sky_sphere_mesh(radius=480.0, segments=48, slices=24)`: a UV sphere with `segments * slices` quads, closed at both poles (triangles fan from pole vertices to the rings). No degenerate quads or missing faces.
+- Sky material: `StandardMaterial { base_color: Color::WHITE, unlit: true, base_color_texture: Some(sky_tex), alpha_mode: AlphaMode::Opaque, ..default() }` on a `Mesh` of radius 480 m, placed at `Vec3::ZERO`. The `Mesh` component is `Sphere(480)` or a hand-built mesh — both work. No `Sphere::new()` primitive needed.
+- Sky texture: 256×512 `Rgba8UnormSrgb` gradient. Horizon = pale blue `Color::srgb(0.6, 0.8, 1.0)`, zenith = dark blue `Color::srgb(0.05, 0.1, 0.4)`. The gradient is built by lerping RGB per row: `lerp(horizon_color, zenith_color, t)` where `t = row / (height-1)`. Top row = zenith, bottom row = horizon. `sky_gradient_texture_is_bluer_at_zenith` test asserts `rgba(top).2 > rgba(bottom).2` (zenith is bluer = higher blue channel).
+- `Sky` marker is used by the camera or any future system that wants to reference the sky entity; `setup_sky` inserts `Sky` and a log line confirms "sky entity spawned at radius 480".
+- `bevy::picking::PickingPlugin` is NOT needed for the main app (it uses `DefaultPlugins`, which includes it). It IS needed when building a minimal test app that uses `PhysicsPlugins::default()` — add `bevy::picking::PickingPlugin` and `bevy::mesh::MeshPlugin` explicitly (see the test pitfall above).
+
+### Bevy 0.20 test app gotcha for Avian (verified by compile + test failure + fix)
+- A minimal test app using `app.add_plugins((MinimalPlugins, TransformPlugin, PhysicsPlugins::default(), AssetPlugin::default()))` will panic on `app.update()` with "Message not initialized" because `ColliderCachePlugin` reads `MessageReader<AssetEvent<Mesh>>` — which requires `bevy::mesh::MeshPlugin` to register `Mesh` as an asset type. Fix: add `bevy::mesh::MeshPlugin` to the plugin tuple in any minimal Avian test app. `PickingPlugin` is not the cause; it was the `AssetEvent<Mesh>` that was missing.
 
 # Related Concepts
 - [Weft Voxel Engine — Texture Atlas & Resource Pack Analysis](../weft-analysis.md): Corrects and extends the weft-analysis Bevy 0.20 translation table with actual verified API (base_color_texture, emissive LinearRgba, single-plane textured grid, auto-walk animation)

@@ -1,3 +1,6 @@
+## 2026-11-04
+* **Update**: Updated concept `rendering/weft-renderscene.md` (Added verified Phase 3 decisions: avian3d 0.8 integration — Gravity default is Zero, Collider::cuboid takes full dimensions, minimal Avian test app needs bevy::mesh::MeshPlugin to avoid MessageReader<AssetEvent<Mesh>> panic; 10-deep procedural voxel ground (build_ground, GROUND_DEPTH=10, GROUND_HALF=64), no Plane3d/grid texture; 3x voxel resolution (SCALE=3, 381,129 voxels in 49 chunks); procedural sky sphere (Sky marker, 48x24 UV sphere radius 480, 256x512 zenith-horizon gradient texture)).
+
 ## 2026-11-03
 * **Update**: Updated concept `rendering/weft-renderscene.md` (Added verified Phase 2 per-chunk face-culling mesh decisions: Mesh::new(TriangleList).with_inserted_* builder, VertexFormat per attribute, Indices::U32, missing StandardMaterial vertex-color toggle so one mesh is used per distinct color, and dirty-chunk tracking pattern).
 * **Update**: Linked `rendering/weft-renderscene.md` to `components-game.md` (Concrete implementation of the playable character entity and environment rendering described by components-game).
